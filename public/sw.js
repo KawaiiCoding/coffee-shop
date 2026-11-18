@@ -3,14 +3,23 @@
    - Everything else from this site (scripts, styles, icons, music): cache first, then network.
    - Google Fonts: cached after first use.
    Bump VERSION to force old caches to be dropped. */
-const VERSION = 'coffee-shop-v1';
+const VERSION = 'coffee-shop-v2';
+
+/** Safari refuses page loads that a service worker answers with a redirected response
+ *  (GitHub Pages redirects /coffee-shop to /coffee-shop/). Copy it into a fresh, non-redirected one. */
+async function clean(res) {
+  if (!res || !res.redirected) return res;
+  const body = await res.blob();
+  return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+}
 const CORE = ['./', './index.html', './manifest.webmanifest', './favicon.svg',
   './icon-192.png', './icon-512.png', './apple-touch-icon.png', './music/playlist.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION)
-      .then((cache) => Promise.all(CORE.map((url) => cache.add(url).catch(() => {}))))
+      .then((cache) => Promise.all(CORE.map((url) =>
+        fetch(url).then(clean).then((res) => (res.ok ? cache.put(url, res) : undefined)).catch(() => {}))))
       .then(() => self.skipWaiting()),
   );
 });
@@ -34,8 +43,12 @@ self.addEventListener('fetch', (event) => {
   if (req.mode === 'navigate') {
     event.respondWith(
       fetch(req)
-        .then((res) => { const copy = res.clone(); caches.open(VERSION).then((c) => c.put('./index.html', copy)); return res; })
-        .catch(() => caches.match('./index.html').then((r) => r || caches.match('./'))),
+        .then(clean)
+        .then((res) => {
+          if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put('./index.html', copy)); }
+          return res;
+        })
+        .catch(() => caches.match('./index.html').then((r) => r || caches.match('./')).then(clean)),
     );
     return;
   }

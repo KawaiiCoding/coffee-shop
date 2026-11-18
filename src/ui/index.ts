@@ -98,12 +98,13 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
 
   svg.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
-    const m = svg.getScreenCTM();
-    if (!m) return;
-    const pt = svg.createSVGPoint();
-    pt.x = e.clientX; pt.y = e.clientY;
-    const p = pt.matrixTransform(m.inverse());
-    game.tapScene(p.x, p.y);
+    // Map the tap through the viewBox by hand: Safari's getScreenCTM is unreliable for CSS-scaled svgs.
+    const r = svg.getBoundingClientRect();
+    const vb = svg.viewBox.baseVal;
+    if (!r.width || !r.height || !vb || !vb.width) return;
+    const k = Math.min(r.width / vb.width, r.height / vb.height); // preserveAspectRatio meet
+    const ox = r.left + (r.width - vb.width * k) / 2, oy = r.top + (r.height - vb.height * k) / 2;
+    game.tapScene(vb.x + (e.clientX - ox) / k, vb.y + (e.clientY - oy) / k);
   });
   svg.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -137,14 +138,15 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
   document.addEventListener('gesturestart', (e) => e.preventDefault());
 
   /* ----------------------------- audio unlock ----------------------------- */
+  // iOS Safari only lets sound start inside touchend/click, so try on every gesture
+  // until a click/touchend/keydown has happened (pointerdown alone may not count).
   let unlocked = false;
-  const unlock = () => {
+  const unlock = (e: Event) => {
     if (unlocked) return;
-    unlocked = true;
     try { audio.unlock(); } catch { /* ignore */ }
+    if (e.type !== 'pointerdown') unlocked = true;
   };
-  root.addEventListener('pointerdown', unlock, { capture: true });
-  root.addEventListener('keydown', unlock, { capture: true });
+  for (const ev of ['pointerdown', 'touchend', 'click', 'keydown']) root.addEventListener(ev, unlock, { capture: true });
 
   /* ------------------------------ ui state ------------------------------ */
   const ui: UiState = { decorSlot: 'ceiling', confirmTitle: false, confirmReset: false };

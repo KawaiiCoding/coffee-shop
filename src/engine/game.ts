@@ -28,6 +28,8 @@ export interface GameOptions {
   dayLength?: number;        // seconds, default 120
 }
 
+/** TEMPORARY test money: every load (and reset) starts with at least this many coins. Set to 0 before release. */
+export const TEST_COINS = 20000;
 export const WAITER_SPEED = 150;
 export const GUEST_SPEED = 90;
 export const READY_MAX = 4;
@@ -104,6 +106,8 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
   const toast = (text: string) => emit({ type: 'toast', text });
 
   let progress = loadProgress(storage);
+  // TEMPORARY for testing: top coins up to TEST_COINS on every load. Set TEST_COINS to 0 to remove.
+  if (progress.coins < TEST_COINS) progress.coins = TEST_COINS;
   let nextGuestId = 1;
   let nextEffectId = 1;
   let spawnTimer = 1.5;
@@ -630,6 +634,7 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
   function resetSave() {
     clearProgress(storage);
     progress = defaultProgress();
+    if (progress.coins < TEST_COINS) progress.coins = TEST_COINS;
     state.progress = progress;
     state.theme = resolveTheme(progress.theme, now());
     state.mode = 'title';
