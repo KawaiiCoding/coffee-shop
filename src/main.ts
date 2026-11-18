@@ -7,6 +7,9 @@ const audio = createAudio();
 const ui = mountUI(root, game, audio);
 const renderer = createRenderer(ui.sceneSvg, game);
 
+// Development only (not in the built game): lets the browser console / screenshot scripts drive the game.
+if (import.meta.env.DEV) (window as unknown as { game: typeof game }).game = game;
+
 game.subscribe((e) => {
   if (e.type === 'sfx') audio.playSfx(e.name);
   // keeps music in sync when it's toggled from inside the café (tapping the record player)
