@@ -188,8 +188,28 @@ export function selectRing(pulse: number): string {
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /** Floating effect at (0,0); t = 0..1 of its life (art handles rise + fade). */
-export function effect(kind: 'coin' | 'heart' | 'angry' | 'sparkle' | 'text', t: number, text?: string): string {
+/** A little broom swishing back and forth over the mess (pivot at the top of the handle),
+ *  kicking up soft dust puffs; fades out at the end. k = 0..1 of its life. */
+function broomSweep(k: number): string {
+  const swing = Math.sin(k * Math.PI * 5) * 28;              // 2.5 swishes
+  const op = k < 0.1 ? k / 0.1 : k > 0.8 ? (1 - k) / 0.2 : 1;
+  const broom =
+    ln('M0,-34 L0,-6', 3.2, '#a8714d')                                             // handle
+    + sh('M-3,-8 C-4,-12 4,-12 3,-8z', '#e2607a', 1.6)                              // ribbon band
+    + sh('M-4,-8 C-10,-2 -13,6 -12,10 C-6,12 6,12 12,10 C13,6 10,-2 4,-8z', '#f6cf6b', 2) // bristles
+    + ln('M-6,0 L-8,9 M-2,-1 L-3,10 M2,-1 L3,10 M6,0 L8,9', 1.1, '#c99a3c');
+  let puffs = '';
+  for (let i = 0; i < 3; i++) {
+    const pk = (k * 2.5 + i / 3) % 1;
+    const px = (i - 1) * 12 + Math.sin(k * 9 + i) * 4, py = 8 - pk * 14;
+    puffs += `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${(3 + pk * 4).toFixed(1)}" fill="#e9e2dc" stroke="${INK}" stroke-width=".8" stroke-opacity=".35" opacity="${((1 - pk) * 0.8).toFixed(2)}"/>`;
+  }
+  return `<g opacity="${op.toFixed(2)}">${puffs}<g transform="translate(0,-6) rotate(${swing.toFixed(1)} 0 -34)">${broom}</g></g>`;
+}
+
+export function effect(kind: 'coin' | 'heart' | 'angry' | 'sparkle' | 'text' | 'broom', t: number, text?: string): string {
   const k = Math.max(0, Math.min(1, t));
+  if (kind === 'broom') return broomSweep(k);
   const rise = -30 * (1 - (1 - k) * (1 - k));
   const op = k < 0.6 ? 1 : 1 - (k - 0.6) / 0.4;
   const s = k < 0.15 ? 0.6 + (k / 0.15) * 0.5 : k < 0.3 ? 1.1 - ((k - 0.15) / 0.15) * 0.1 : 1;

@@ -7,6 +7,7 @@ import type { MenuItemId, TableStyle, ThemeId } from '../types';
 import { MACHINE } from '../layout';
 import { INK, CREAM, fl, ln, sh, blob, box, shadow, tinyFace } from './kit';
 import { item } from './items';
+const itemArt = item;
 
 interface FP {
   a: string;      // main pastel (blush / pink / red / orange)
@@ -27,7 +28,6 @@ const PAL: Record<ThemeId, FP> = {
   halloween: { a: '#ef9a52', b: '#9a7cb6', c: '#6a5878', cream: '#f6ead8', wood: '#a98266', woodD: '#86624c', front: '#d9c8e2', yarn: '#ef9a52', machine: '#9a7cb6' },
 };
 
-const GOLD = '#f2c95c';
 const BERRY = '#c4506a';
 const r1 = (n: number) => +n.toFixed(1);
 
@@ -61,44 +61,46 @@ export function seat(style: TableStyle, theme: ThemeId): string {
 
 /* --------------------------------------------------------------- table */
 
+/** Tip coins: a big face-on gold coin in front of a short stack (more coins = taller stack),
+ *  on a soft gold glow so it pops against the cloth. ~13 elements max. */
 function coinPile(n: number, x0: number): string {
   if (n <= 0) return '';
-  const a = Math.min(n, 4), b = n - a;
-  const stacks: [number, number, number][] = [[x0, -35, a]];
-  if (b > 0) stacks.push([x0 + 9, -33.5, b]);
-  let bodies = '', tops = '', ridges = '';
-  for (const [cx, base, k] of stacks) {
-    const h = k * 2.6, t = base - h;
-    bodies += `M${cx - 5},${r1(t)} L${cx - 5},${base} C${cx - 5},${r1(base + 2.4)} ${cx + 5},${r1(base + 2.4)} ${cx + 5},${base} L${cx + 5},${r1(t)}z`;
-    tops += blob(cx, t, 5, 2, 0.1);
+  const COIN = '#f6c84c', RIM = '#c98a1e';
+  let s = `<path d="${blob(x0 + 1, -42, 16, 13, 0)}" fill="#fff6cf" opacity=".6"/>`
+    + `<path d="${blob(x0 + 1, -42, 12, 10, 0)}" fill="#ffe9a0" opacity=".75"/>`;
+  const k = n - 1, sx = x0 + 5, base = -36;
+  if (k > 0) {
+    const t = r1(base - k * 3.2);
+    const body = `M${sx - 7},${t} L${sx - 7},${base} C${sx - 7},${base + 3.6} ${sx + 7},${base + 3.6} ${sx + 7},${base} L${sx + 7},${t}z`;
+    let ridges = '';
     for (let j = 1; j < k; j++) {
-      const y = r1(base - j * 2.6);
-      ridges += `M${cx - 5},${y} C${cx - 5},${r1(y + 2.4)} ${cx + 5},${r1(y + 2.4)} ${cx + 5},${y}`;
+      const y = r1(base - j * 3.2);
+      ridges += `M${sx - 6},${y} C${sx - 6},${r1(y + 3.2)} ${sx + 6},${r1(y + 3.2)} ${sx + 6},${y}`;
     }
+    s += sh(body, COIN, 2.2)
+      + (ridges ? ln(ridges, 1.2, RIM) : '')
+      + sh(blob(sx, t, 7, 2.8, 0), '#ffdf7e', 2.2)
+      + ln(blob(sx, t, 4.2, 1.5, 0), 1.1, RIM);
   }
-  return sh(bodies, GOLD, 1.6) + sh(tops, '#f8dc86', 1.6) + (ridges ? ln(ridges, 1, INK) : '');
+  const cx = x0 - 3, cy = -41.5;
+  return s + sh(blob(cx, cy, 6.8, 6.8, 0), COIN, 2.4)
+    + ln(blob(cx, cy, 4.6, 4.6, 0), 1.4, RIM)
+    + ln(`M${cx - 3.6},${cy - 1.2} q0.8,-3 4,-3.8`, 1.7, '#ffffff');
 }
 
 function yarnTable(p: FP): string {
-  let doily = 'M-30,-33';
-  for (let i = 0; i < 10; i++) doily += ' q3,5.5 6,0';
-  doily += ' C24,-41 -24,-41 -30,-33z';
-  const holes: [number, number][] = [];
-  for (let i = 0; i < 10; i++) holes.push([-27 + i * 6, -31.2]);
   return ln('M18,-5 C28,-1 34,3 42,1 C47,0 49,-4 46,-6', 1.8, INK)
     + sh(blob(0, -17, 25, 18), p.yarn)
     + ln('M-21,-27 C-8,-35 12,-30 23,-19 M-25,-15 C-10,-26 10,-20 24,-8 M-18,-3 C-6,-12 8,-10 17,-1 M-6,-33 C-15,-22 -12,-8 -4,0', 1.3)
     + sh(blob(0, -31, 36, 7.5), p.woodD)
     + sh(blob(0, -35, 35, 6.5), p.wood)
-    + sh(doily, '#fffdf8', 1.6)
-    + `<path d="${dots(holes, 0.9)}" fill="${INK}" opacity=".35"/>`
-    + ln(blob(0, -36, 14, 2.6), 1.1);
+    // smooth oval doily with a soft dashed lace line inside
+    + sh(blob(0, -35.5, 29, 5.4, 0), '#fffdf8', 1.6)
+    + `<path d="${blob(0, -35.5, 23, 3.8, 0)}" fill="none" stroke="${INK}" stroke-width="1.1" stroke-dasharray="3 3" stroke-linecap="round" opacity=".45"/>`;
 }
 
 function woodTable(p: FP): string {
-  let cloth = 'M-36,-35 C-36,-42 36,-42 36,-35 L37,-24';
-  for (let i = 0; i < 8; i++) cloth += ' q-4.6,3.2 -9.25,0';
-  cloth += ' L-36,-35z';
+  const cloth = 'M-36,-35 C-36,-42 36,-42 36,-35 L37,-24 C22,-19.5 -22,-19.5 -37,-24 L-36,-35z';
   let check = '';
   for (let x = -30; x <= 30; x += 10) check += `M${x},-37.5 L${r1(x * 1.03)},-25.5`;
   check += 'M-34,-32 L34,-32 M-35,-27.5 L35,-27.5';
@@ -134,7 +136,7 @@ export function table(style: TableStyle, theme: ThemeId, o: { item: MenuItemId |
   s += shadow(0, 0, 38, 7);
   s += style === 'wood' ? woodTable(p) : style === 'teacup' ? teacupTable(p) : yarnTable(p);
   if (o.item) s += `<g transform="translate(-7,-45)">${item(o.item)}</g>`;
-  if (o.coins > 0) s += coinPile(Math.min(6, Math.ceil(o.coins / 4)), o.item ? 14 : -4);
+  if (o.coins > 0) s += coinPile(Math.min(6, Math.ceil(o.coins / 4)), o.item ? 17 : -1);
   return s;
 }
 
@@ -144,70 +146,54 @@ export function table(style: TableStyle, theme: ThemeId, o: { item: MenuItemId |
 export function counterBack(theme: ThemeId): string {
   const p = PAL[theme];
   const mx = MACHINE.x, my = MACHINE.y;
-  // shelf with jars and a cup
-  let s = ln('M230,154 l4,6 M276,154 l-4,6', 2, p.woodD)
-    + sh(box(226, 148, 56, 6, 2, 0.6), p.wood)
-    + sh(box(230, 130, 14, 18, 4, 0.6), '#f6efe4')
-    + fl(box(231, 138, 11, 8, 3, 0.4), '#8a5a3e', 0.85)
-    + sh(box(229, 126, 16, 5, 2, 0.4), p.a)
-    + sh(box(248, 135, 12, 13, 4, 0.5), '#f6efe4')
-    + fl(box(249, 140, 9, 6, 2, 0.3), '#a0704f', 0.85)
-    + sh(box(247, 131, 14, 5, 2, 0.4), p.b)
-    + sh('M265,136 L267,148 L277,148 L279,136z', p.cream, 2)
-    + ln('M279,139 q5,1 1,6', 1.8)
-    + ln('M270,141 q1.5,-2 2,0 q0.5,-2 2,0 q-1,2.5 -2,3 q-1,-0.5 -2,-3', 1, p.a);
+  // simple shelf with two jars (kept well above the machine)
+  let s = ln('M232,150 l4,6 M274,150 l-4,6', 2, p.woodD)
+    + sh(box(228,144,50,6,2,0.6), p.wood)
+    + sh(box(233,126,14,18,4,0.6), '#f6efe4')
+    + fl(box(234,134,11,8,3,0.4), '#8a5a3e', 0.85)
+    + sh(box(232,122,16,5,2,0.4), p.a)
+    + sh(box(256,131,12,13,4,0.5), '#f6efe4')
+    + sh(box(255,127,14,5,2,0.4), p.b);
   // menu chalkboard
   s += ln('M338,133 L345,125 L352,133', 1.4)
     + sh(box(332, 132, 26, 40, 4), p.woodD)
     + fl(box(335, 135, 19, 33, 3, 0.5), '#55625b')
-    + ln('M339,142 h12 M339,150 h9 M339,158 h11 M339,164 h6', 1.2, CREAM)
-    + `<circle cx="353" cy="150" r="1.5" fill="${p.c}"/>`;
-  // espresso machine at MACHINE (40x44)
-  s += sh(box(mx + 7, my - 6, 9, 7, 2, 0.4), p.cream, 1.8)
-    + sh(box(mx + 21, my - 5, 8, 6, 2, 0.4), p.a, 1.8)
-    + sh(box(mx + 1, my + 2, 38, 34, 7), p.machine)
-    + ln(`M${mx + 4},${my + 3} C${mx + 14},${my + 1} ${mx + 26},${my + 3} ${mx + 36},${my + 2}`, 1.2)
-    + sh(blob(mx + 20, my + 14, 8, 7.5), CREAM, 2)
-    + ln(`M${mx + 14},${my + 10} q6,-5 12,0`, 1, INK)
+    + ln('M339,145 h12 M339,155 h9', 1.4, CREAM);
+  // espresso machine at MACHINE (40x44): bold outline, few parts
+  s += sh(box(mx + 12, my - 6, 10, 7, 2, 0.4), p.cream, 2)
+    + sh(box(mx + 1, my + 2, 38, 34, 7), p.machine, 2.8)
+    + sh(blob(mx + 20, my + 14, 8, 7.5), CREAM, 2.2)
     + tinyFace(mx + 20, my + 14, 0.6)
-    + `<path d="${dots([[mx + 7, my + 27], [mx + 33, my + 27]], 2.2)}" fill="${p.c}" stroke="${INK}" stroke-width="1.2"/>`
-    + sh(box(mx + 14, my + 24, 12, 5, 2, 0.4), '#ddd5ca', 1.8)
-    + ln(`M${mx + 20},${my + 29} v2.5`, 1.6)
-    + ln(`M${mx + 35},${my + 19} q6,2 5,11`, 2)
-    + sh(box(mx - 2, my + 36, 44, 7, 3, 0.5), '#eadfcf')
-    + sh(box(mx + 15, my + 31, 10, 6, 2, 0.4), p.cream, 1.8);
+    + sh(box(mx + 14, my + 24, 12, 5, 2, 0.4), '#ddd5ca', 2)
+    + ln(`M${mx + 35},${my + 19} q6,2 5,11`, 2.2)
+    + sh(box(mx - 2, my + 35, 44, 6, 3, 0.5), '#eadfcf', 2.2)
+    + sh(box(mx + 15, my + 30, 10, 6, 2, 0.4), p.cream, 2);
   return s;
 }
 
 /** Counter front face and top, drawn AFTER the barista (hides barista's lower body). */
 export function counterFront(theme: ThemeId): string {
   const p = PAL[theme];
-  let knit = '';
-  for (let x = 225; x < 358; x += 7) knit += `M${x},239 l3.5,4 l3.5,-4 M${x},245 l3.5,4 l3.5,-4`;
-  let fringe = '';
-  for (let x = 226; x < 360; x += 8) fringe += `M${x},252 l0.5,4.5`;
-  return sh(box(222, 232, 140, 68, 4), p.front)
-    + ln(box(282, 260, 32, 34, 4, 0.6), 1.4)
-    + ln(box(322, 260, 32, 34, 4, 0.6), 1.4)
-    + sh(box(219, 224, 143, 10, 4, 0.6), p.wood)
-    + ln('M222,229 C260,230 320,228 360,229.5', 1, p.woodD)
-    // knitted runner
-    + sh(box(222, 236, 140, 15, 3, 0.6), p.yarn)
-    + ln(knit, 1.1)
-    + ln(fringe, 1.6, p.yarn === p.a ? p.b : p.a)
-    // pastry display window with a glass dome
-    + sh(box(228, 258, 46, 37, 5), '#e6f2ef')
-    + sh(box(241, 277, 20, 9, 3, 0.4), p.cream, 1.8)
-    + fl(box(241, 276, 20, 4, 2, 0.3), p.a, 0.9)
-    + `<circle cx="251" cy="274.5" r="2" fill="${p.a}" stroke="${INK}" stroke-width="1"/>`
-    + ln('M236,287 h30 M251,287 v5 M246,292 h10', 1.8)
-    + ln('M235,286 C235,264 267,264 267,286', 1.6)
-    + ln('M240,280 q2,-7 7,-9', 1.3, '#ffffff');
+  return sh(box(222, 236, 140, 64, 4), p.front, 2.8)
+    // soft shade under the top lip + one plain inset panel
+    + fl(box(222, 237, 140, 5, 2, 0.3), p.woodD, 0.3)
+    + ln(box(286, 252, 66, 38, 5, 0.6), 1.4)
+    // clear, plain, light counter top (ready drinks sit on it)
+    + sh(box(218, 222, 144, 15, 5, 0.6), p.cream, 2.8)
+    + ln('M224,233.8 C260,234.6 320,233.2 356,234', 1.2, p.wood)
+    // small pastry window with a glass dome at the left end
+    + sh(box(229, 250, 44, 38, 5), '#e6f2ef')
+    + sh(box(241, 270, 20, 9, 3, 0.4), p.cream, 1.8)
+    + fl(box(241, 269, 20, 4, 2, 0.3), p.a, 0.9)
+    + `<circle cx="251" cy="267.5" r="2" fill="${p.a}" stroke="${INK}" stroke-width="1"/>`
+    + ln('M236,280 h30 M251,280 v4', 1.8)
+    + ln('M235,279 C235,257 267,257 267,279', 1.6)
+    + ln('M240,273 q2,-7 7,-9', 1.3, '#ffffff');
 }
 
 /** Brewing progress bar above the machine (progress 0..1, null = idle) and steam. */
 export function brewIndicator(progress: number | null, item: MenuItemId | null, time: number): string {
-  void item;
+
   const mx = MACHINE.x, my = MACHINE.y;
   const curl = (x: number, ph: number, op: number) => {
     const w = r1(Math.sin(time * 2.2 + ph) * 2.2);
@@ -216,11 +202,19 @@ export function brewIndicator(progress: number | null, item: MenuItemId | null, 
   };
   if (progress == null) return curl(mx + 20, 0, 0.25 + 0.1 * Math.sin(time * 1.3));
   const q = Math.max(0, Math.min(1, progress));
-  const bx = mx + 2, by = my - 30, bw = 36, bh = 7;
   let s = curl(mx + 12, 0, 0.55 + 0.2 * Math.sin(time * 2))
     + curl(mx + 27, 0.5, 0.55 + 0.2 * Math.sin(time * 2 + 1.7));
-  s += fl(box(bx, by, bw, bh, 3.5, 0.4), CREAM);
-  if (q > 0.02) s += fl(box(bx + 1, by + 1, r1(Math.max(5, (bw - 2) * q)), bh - 2, 2.5, 0.2), '#a8c69f');
-  s += ln(box(bx, by, bw, bh, 3.5, 0.4), 1.8);
+  // A small cute brewing gauge set into the counter's front panel (box 286..352 x 252..290):
+  // a recessed slot, a little cup on the left, and a pastel bar that fills with a heart at its tip.
+  const sx = 291, sy = 263, sw = 56, sh2 = 16;
+  s += `<rect x="${sx}" y="${sy}" width="${sw}" height="${sh2}" rx="8" fill="${INK}" opacity=".22"/>`;            // recess
+  s += `<rect x="${sx}" y="${sy + 1.5}" width="${sw}" height="2" rx="1" fill="${INK}" opacity=".18"/>`;          // inner top shadow
+  const bx = sx + 17, by = sy + 4, bw = sw - 21, bh = 8;
+  s += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="4" fill="#fffaf2" stroke="${INK}" stroke-width="1.6"/>`;
+  const w = r1(Math.max(4, (bw - 2) * q));
+  s += `<rect x="${bx + 1}" y="${by + 1}" width="${w}" height="${bh - 2}" rx="3" fill="#8fc3a7"/>`;
+  s += `<path transform="translate(${r1(bx + 1 + w)} ${by + 4}) scale(.42)" d="M0,4 C-9,-3 -4,-10 0,-5 C4,-10 9,-3 0,4z" fill="#e2607a" stroke="${INK}" stroke-width="2"/>`;
+  s += `<circle cx="${sx + 8}" cy="${sy + 8}" r="7" fill="#fffaf2" stroke="${INK}" stroke-width="1.6"/>`;
+  if (item) s += `<g transform="translate(${sx + 8} ${sy + 8.5}) scale(.42)">${itemArt(item)}</g>`;
   return s;
 }

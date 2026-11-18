@@ -3,7 +3,7 @@
    The UI overlays a top bar over y 0..56 and a bottom nav over y 650..720,
    so nothing that must be tapped sits there.
    ===================================================================== */
-import type { DecorSlot } from './types';
+import type { DecorSlot, HomeActionId, HomeSlot } from './types';
 
 export const SCENE = { w: 360, h: 720 };
 
@@ -66,3 +66,47 @@ export const DECOR_ANCHOR: Record<DecorSlot, { x: number; y: number }> = {
   corner: { x: 338, y: 360 },
   rug: { x: 180, y: 470 },
 };
+
+/* =====================================================================
+   DOOR QUEUE: up to 3 guests wait in a line; index 0 is at DOOR_SPOT.
+   ===================================================================== */
+export const DOOR_QUEUE = [
+  { x: 60, y: 285 }, { x: 104, y: 292 }, { x: 146, y: 299 },
+];
+
+/* =====================================================================
+   CLEANUP (mode 'cleanup'): where the mess starts. Engine places chores here.
+   ===================================================================== */
+export const MESS_SPOTS: { kind: 'dust' | 'cobweb' | 'box' | 'spill'; x: number; y: number }[] = [
+  { kind: 'cobweb', x: 22, y: 78 },  { kind: 'cobweb', x: 236, y: 70 },
+  { kind: 'dust', x: 70, y: 330 },   { kind: 'dust', x: 210, y: 440 },
+  { kind: 'dust', x: 300, y: 560 },  { kind: 'dust', x: 120, y: 560 },
+  { kind: 'box', x: 180, y: 380 },   { kind: 'box', x: 60, y: 450 },   { kind: 'box', x: 300, y: 440 },
+  { kind: 'spill', x: 190, y: 600 },
+];
+
+/* =====================================================================
+   HOME (scene 'home'): Mocha's small flat, same 360x720 portrait viewBox.
+   Wall y 0..250, floor below. UI covers y 0..56 (top) and 640..720 (action dock).
+   Fixed furniture art draws at these spots; the bear walks to `stand` to do the action.
+   ===================================================================== */
+export const HOME_WALL_BOTTOM = 250;
+export const HOME_SPOTS: Record<HomeActionId, { x: number; y: number; stand: { x: number; y: number }; label: string }> = {
+  bath:     { x: 36,  y: 250, stand: { x: 62,  y: 282 }, label: 'Bathroom door' },   // tall door, bottom-centre at (36,250), 56 wide x 120 tall
+  save:     { x: 238, y: 132, stand: { x: 238, y: 280 }, label: 'Savings jar' },     // jar on a small shelf, jar centre; shelf under it at y ~150
+  cook:     { x: 300, y: 250, stand: { x: 292, y: 286 }, label: 'Little stove' },    // stove bottom-centre at (300,250), ~84 wide x 76 tall
+  sleep:    { x: 96,  y: 452, stand: { x: 178, y: 452 }, label: 'Bed' },             // bed footprint centre-bottom (96,452), ~150 wide, headboard at the wall side (left)
+  call_mom: { x: 300, y: 430, stand: { x: 254, y: 440 }, label: 'Phone' },           // small round side table with an old phone, bottom-centre
+  read:     { x: 280, y: 600, stand: { x: 280, y: 598 }, label: 'Armchair' },        // armchair bottom-centre; the bear sits in it
+};
+/** Home decor anchors (same conventions as DECOR_ANCHOR). */
+export const HOME_ANCHOR: Record<HomeSlot, { x: number; y: number }> = {
+  window: { x: 160, y: 108 }, // centre of the window (window ~100 x 90); curtains frame it, max 150 x 120
+  wall:   { x: 96,  y: 120 }, // centre, max 52 x 56 (between bath door and window)
+  bed:    { x: 96,  y: 452 }, // same as the bed: quilt drawn over the bed, max 150 x 80
+  rug:    { x: 180, y: 545 }, // centre, flat, max 150 x 54
+  corner: { x: 336, y: 360 }, // bottom-centre, max 40 x 90
+  pet:    { x: 170, y: 620 }, // bottom-centre, max 50 x 40
+};
+/** Where the bear stands when idle at home. */
+export const HOME_IDLE = { x: 180, y: 380 };

@@ -1,8 +1,9 @@
 /* Scene renderer: static layer (rebuilt on decor/theme change) + dynamic layer (~30fps). */
 import * as art from '../art';
-import type { DecorId, DecorSlot, DrawCharacterOpts, GameApi, GameState, TableStyle, CharacterLook } from '../types';
+import type { Chore, DecorId, DecorSlot, DrawCharacterOpts, GameApi, GameState, TableStyle, CharacterLook } from '../types';
 import { BARISTA, DECOR_ANCHOR, READY_SPOTS, TABLES } from '../layout';
-import { seatPoint, type GuestInt } from './game';
+import { isMessChore, seatPoint, type GuestInt } from './game';
+import { homeDynamic, homeStatic } from './render-home';
 import { BARISTA_LOOK, WAITER_LOOK } from './looks';
 
 export interface SceneRenderer { render(): void; }
@@ -32,6 +33,7 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
 
   let staticDirty = true;
   let lastTheme = '';
+  let lastScene = '';
   let lastFrame = -Infinity;
   game.subscribe((e) => { if (e.type === 'decor') staticDirty = true; });
 
@@ -59,6 +61,10 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
 
   function buildStatic(s: GameState) {
     const th = s.theme;
+    lastTheme = th;
+    lastScene = s.scene;
+    staticDirty = false;
+    if (s.scene === 'home') { staticG.innerHTML = homeStatic(s); return; }
     const placed = s.progress.placed;
     const dec = (slot: DecorSlot) => {
       const id = placed[slot];
@@ -69,8 +75,17 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
       art.roomBack(th) +
       dec('rug') + dec('wall') +
       art.counterBack(th);
-    staticDirty = false;
-    lastTheme = th;
+  }
+
+  /** Café not set up yet: tables / decor appear as their cleanup chores are done. */
+  function setupState(s: GameState) {
+    const ready = s.progress.cleanupDone;
+    const placedChore = (pred: (c: Chore) => boolean) => ready || s.chores.some((c) => c.done && pred(c));
+    return {
+      table: (i: number) => i > 2 || placedChore((c) => c.kind === 'place_table' && c.table === i),
+      decor: (slot: DecorSlot) => (slot !== 'ceiling' && slot !== 'back') || placedChore((c) => c.kind === 'place_decor' && c.slot === slot),
+      messLeft: !ready && s.chores.some((c) => !c.done && isMessChore(c)),
+    };
   }
 
   function buildDynamic(s: GameState): string {
@@ -81,15 +96,17 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
     const out: string[] = [];
     const t = s.time;
     const placed = s.progress.placed;
+    const setup = setupState(s);
+    const cleaning = !s.progress.cleanupDone;
 
     // ceiling decor sways a little, like it's hanging on a string
-    if (placed.ceiling) {
+    if (placed.ceiling && setup.decor('ceiling')) {
       const a = DECOR_ANCHOR.ceiling;
       out.push(at(a.x + Math.sin(t * 0.9) * 1.2, a.y + Math.sin(t * 1.3) * 1.5, decorStr(placed.ceiling, th),
         `rotate(${(Math.sin(t * 0.7) * 0.35).toFixed(2)} 180 0)`));
     }
     // back-wall furniture: record player bops to the music, the cat breathes
-    if (placed.back) {
+    if (placed.back && setup.decor('back')) {
       const a = DECOR_ANCHOR.back;
       const playing = s.progress.settings.music;
       let extra = '';
@@ -99,6 +116,20 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
       } else if (placed.back === 'cat_bed') extra = breathe(t * 0.6, 0, 0.03);
       out.push(at(a.x, a.y, decorStr(placed.back, th), extra));
       if (placed.back === 'record_player') out.push(at(a.x, a.y, art.musicNotes(t, playing)));
+    }
+
+    // cleanup: cobwebs on the wall, "place it here" ghosts for decor once the mess is gone
+    if (cleaning) {
+      for (const c of s.chores) {
+        if (c.kind === 'cobweb' && !c.done) out.push(at(c.x, c.y, art.mess('cobweb', 1 - c.hp / c.maxHp, t)));
+      }
+      if (!setup.messLeft && s.mode === 'cleanup') {
+        for (const c of s.chores) {
+          if (c.done || c.kind !== 'place_decor') continue;
+          if (c.slot === 'ceiling') out.push(at(DECOR_ANCHOR.ceiling.x, DECOR_ANCHOR.ceiling.y, art.placeGhost('decor_ceiling', pulse)));
+          else out.push(at(c.x, c.y, art.placeGhost('decor_back', pulse)));
+        }
+      }
     }
 
     // barista + counter (bobs while brewing)
@@ -118,7 +149,7 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
     const highlightFree = s.selectedGuest != null || doorGuestPresent;
     const sorted: { y: number; svg: string }[] = [];
     for (const t of s.tables) {
-      if (!t.unlocked) continue;
+      if (!t.unlocked || !setup.table(t.index)) continue;
       const tp = TABLES[t.index];
       const g = guests.find((x) => x.id === t.guestId && SEATED.has(x.phase));
       let body = art.seat(style, th);
@@ -136,6 +167,18 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
       body += art.table(style, th, { item: t.item, coins: t.coins, highlight: highlightFree && free, pulse });
       sorted.push({ y: tp.y, svg: at(tp.x, tp.y, body) });
     }
+    if (cleaning) {
+      for (const c of s.chores) {
+        if (c.done) continue;
+        if (isMessChore(c)) {
+          if (c.kind !== 'cobweb') {
+            sorted.push({ y: c.kind === 'spill' ? c.y - 40 : c.y, svg: at(c.x, c.y, art.mess(c.kind as 'dust' | 'box' | 'spill', 1 - c.hp / c.maxHp, t)) });
+          }
+        } else if (c.kind === 'place_table' && !setup.messLeft && s.mode === 'cleanup') {
+          sorted.push({ y: c.y, svg: at(c.x, c.y, art.placeGhost('table', pulse)) });
+        }
+      }
+    }
     const corner = s.progress.placed.corner;
     if (corner) {
       sorted.push({ y: DECOR_ANCHOR.corner.y, svg: at(DECOR_ANCHOR.corner.x, DECOR_ANCHOR.corner.y, decorStr(corner, th),
@@ -145,7 +188,7 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
       if (SEATED.has(g.phase)) continue;
       const moving = (g.path?.length ?? 0) > 0;
       let body = '';
-      if (g.phase === 'door' && s.selectedGuest === g.id) body += art.selectRing(pulse);
+      if ((g.phase === 'door' || g.phase === 'entering') && s.selectedGuest === g.id) body += art.selectRing(pulse);
       body += drawChar(`g${g.id}`, g.look, {
         pose: moving ? 'walk' : 'stand', mood: g.mood, facing: g.facing ?? 1,
         walkPhase: moving ? g.walkPhase ?? 0 : undefined,
@@ -197,11 +240,11 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
     render() {
       const s = game.state;
       let force = false;
-      if (staticDirty || s.theme !== lastTheme) { buildStatic(s); force = true; }
+      if (staticDirty || s.theme !== lastTheme || s.scene !== lastScene) { buildStatic(s); force = true; }
       // throttle to ~30fps using game time (time keeps advancing in every mode)
       if (!force && s.time >= lastFrame && s.time - lastFrame < 1 / 30) return;
       lastFrame = s.time;
-      dynG.innerHTML = buildDynamic(s);
+      dynG.innerHTML = s.scene === 'home' ? homeDynamic(s) : buildDynamic(s);
     },
   };
 }

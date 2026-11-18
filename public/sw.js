@@ -3,7 +3,7 @@
    - Everything else from this site (scripts, styles, icons, music): cache first, then network.
    - Google Fonts: cached after first use.
    Bump VERSION to force old caches to be dropped. */
-const VERSION = 'coffee-shop-v2';
+const VERSION = 'coffee-shop-v3';
 
 /** Safari refuses page loads that a service worker answers with a redirected response
  *  (GitHub Pages redirects /coffee-shop to /coffee-shop/). Copy it into a fresh, non-redirected one. */

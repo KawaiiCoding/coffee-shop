@@ -2,9 +2,10 @@
    All interactivity goes through data-act attributes handled in index.ts. */
 import { decorSvg, itemSvg, titleArtSvg, upgradeSvg } from '../art';
 import type { DecorSlot, DayStats, GameApi, MenuItemId, UpgradeId } from '../types';
+import { homeItemsHtml, purse } from './screens';
 import { art, esc, icon } from './util';
 
-export type SheetKind = 'pause' | 'upgrades' | 'decor' | 'settings';
+export type SheetKind = 'pause' | 'upgrades' | 'decor' | 'settings' | 'home';
 
 export interface UiState {
   decorSlot: DecorSlot;
@@ -21,7 +22,7 @@ export const SLOTS: { id: DecorSlot; label: string }[] = [
 ];
 
 export const SHEET_TITLES: Record<SheetKind, string> = {
-  pause: 'Paused', upgrades: 'Upgrades', decor: 'Decorate', settings: 'Settings',
+  pause: 'Paused', upgrades: 'Upgrades', decor: 'Decorate', settings: 'Settings', home: 'Make it cozy',
 };
 
 const coins = (n: number) => `<span class="cost">${icon('coin')}<b>${esc(n)}</b></span>`;
@@ -37,13 +38,15 @@ export function displayDay(game: GameApi): number {
 /* ------------------------------ title ------------------------------ */
 export function titleHtml(game: GameApi): string {
   const pic = art(() => titleArtSvg(game.state.theme), 'title-art');
+  const fresh = !(game.state.progress.storySeen ?? []).includes('intro');
   return `
     <button class="ibtn title-settings" data-act="open" data-sheet="settings" aria-label="Settings">${icon('settings')}</button>
     <div class="title-inner">
       ${pic || '<span class="title-art title-art-fb" aria-hidden="true"><i></i></span>'}
       <h1 class="title-name">Coffee Shop</h1>
       <p class="title-sub">a cozy little café</p>
-      <button class="btn btn-primary btn-big" data-act="start" data-focus="start">Open the café</button>
+      <button class="btn btn-primary btn-big" data-act="start" data-focus="start">${
+        fresh ? `${icon('play')}<span>Start the story</span>` : 'Open the café'}</button>
       <span class="day-pill"><span>Day ${esc(displayDay(game))}</span></span>
     </div>`;
 }
@@ -65,8 +68,12 @@ export function dayEndHtml(game: GameApi, st: DayStats | null): string {
         <li><span>Guests served</span><b>${esc(stats?.served ?? 0)}</b></li>
         <li><span>Left unhappy</span><b>${esc(stats?.lost ?? 0)}</b></li>
         <li><span>Tips earned</span><b>${coins(stats?.tips ?? 0)}</b></li>
+        <li class="pay-line"><span>${icon('purse')}Your pay</span><b>${purse(stats?.salary ?? 0, '+')}</b></li>
       </ul>
-      <button class="btn btn-primary btn-big" data-act="start" data-focus="start">Next day</button>
+      <div class="row dayend-go">
+        <button class="btn btn-soft" data-act="start" data-focus="next">Next day</button>
+        <button class="btn btn-primary btn-go" data-act="go-home" data-focus="start">${icon('home')}<span>Go home</span></button>
+      </div>
       <div class="quick">
         <button class="btn btn-soft" data-act="open" data-sheet="upgrades">${icon('shop')}<span>Upgrades</span></button>
         <button class="btn btn-soft" data-act="open" data-sheet="decor">${icon('decor')}<span>Decorate</span></button>
@@ -220,6 +227,7 @@ export function sheetBodyHtml(kind: SheetKind, game: GameApi, ui: UiState): stri
     case 'upgrades': return upgradesHtml(game);
     case 'decor': return decorHtml(game, ui);
     case 'settings': return settingsHtml(game, ui);
+    case 'home': return homeItemsHtml(game);
   }
 }
 

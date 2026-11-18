@@ -4,7 +4,12 @@
    Implementation is split over the files in this folder; this module
    re-exports the public surface with the contract's exact signatures.
    ===================================================================== */
-import type { DecorId, MenuItemId, ThemeId } from '../types';
+import type { DecorId, MenuItemId, StoryArtId, ThemeId } from '../types';
+import { storyArtA } from './story-a';
+import { storyArtB } from './story-b';
+export { mess, placeGhost } from './mess';
+export { homeSceneDefs, homeBack, homeFront, savingsJar, homeSpotIcon } from './home-room';
+export { homeItem, homeItemSvg } from './home-items';
 import { decorA } from './decor-a';
 import { decorB } from './decor-b';
 export { musicNotes } from './decor-b';
@@ -55,4 +60,11 @@ export function decorSvg(id: DecorId, theme: ThemeId, size: number): string {
     : CORNER.includes(id) ? '-30 -86 60 90'
     : '-64 -30 128 60';
   return wrap(raw(id, theme), vb, size);
+}
+
+const STORY_A: StoryArtId[] = ['ad', 'walk_to_cafe', 'interview', 'hired', 'messy_shop'];
+/** Story panel illustration (standalone svg, viewBox 0 0 320 240; UI scales it with CSS). */
+export function storyArtSvg(id: StoryArtId): string {
+  const inner = STORY_A.includes(id) ? storyArtA(id) : storyArtB(id);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="${id.replace(/_/g, ' ')}">${inner}</svg>`;
 }

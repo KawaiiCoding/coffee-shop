@@ -127,6 +127,57 @@ export function createAudio(): AudioApi {
       chime(c, 1318.5, 0.52, 0.9, 0.08);
     },
     error: (c) => { tone(c, 230, 0, 0.16, { gain: 0.28, slideTo: 150, lowpass: 900 }); },
+    // soft paper flick: two quick airy rustles
+    page: (c) => {
+      noise(c, 0, 0.09, { gain: 0.07, freq: 3400, q: 0.7 });
+      noise(c, 0.05, 0.16, { gain: 0.05, freq: 5600, q: 0.9 });
+    },
+    // brushy broom swish
+    sweep: (c) => {
+      noise(c, 0, 0.26, { gain: 0.1, freq: 2400, q: 0.5 });
+      noise(c, 0.12, 0.22, { gain: 0.07, freq: 3800, q: 0.6 });
+    },
+    // bubbly pop
+    pop: (c) => {
+      tone(c, 320, 0, 0.09, { gain: 0.24, slideTo: 980 });
+      tone(c, 1250, 0.05, 0.07, { gain: 0.08, slideTo: 1700 });
+    },
+    // soft wooden thunk
+    place: (c) => {
+      tone(c, 170, 0, 0.16, { type: 'triangle', gain: 0.3, slideTo: 105, lowpass: 900 });
+      tone(c, 520, 0, 0.05, { type: 'triangle', gain: 0.08, lowpass: 1400 });
+      noise(c, 0, 0.06, { gain: 0.05, freq: 900, q: 1.2 });
+    },
+    // sizzle in the pan: crackly high noise
+    cook: (c) => {
+      noise(c, 0, 0.75, { gain: 0.035, freq: 6200, q: 0.4 });
+      for (let i = 0; i < 6; i++) noise(c, 0.04 + i * 0.1 + Math.random() * 0.04, 0.05, { gain: 0.05, freq: 4200 + Math.random() * 2400, q: 2 });
+    },
+    // water bloop
+    splash: (c) => {
+      tone(c, 380, 0, 0.12, { gain: 0.2, slideTo: 1100 });
+      tone(c, 560, 0.09, 0.12, { gain: 0.14, slideTo: 1500 });
+      noise(c, 0.02, 0.28, { gain: 0.05, freq: 1300, q: 0.6 });
+    },
+    // two soft ring tones
+    phone: (c) => {
+      for (const t of [0, 0.42]) {
+        tone(c, 740, t, 0.3, { type: 'triangle', gain: 0.1, vibrato: 22, attack: 0.02 });
+        tone(c, 932, t, 0.3, { type: 'triangle', gain: 0.06, vibrato: 22, attack: 0.02 });
+      }
+    },
+    // sleepy descending hum
+    yawn: (c) => {
+      tone(c, 520, 0, 0.95, { type: 'triangle', gain: 0.12, slideTo: 230, attack: 0.14, lowpass: 1200, vibrato: 4 });
+      noise(c, 0.1, 0.7, { gain: 0.025, freq: 900, q: 0.5 });
+    },
+    // coin clinking into a glass jar
+    jar: (c) => {
+      tone(c, 2637, 0, 0.06, { type: 'square', gain: 0.05, lowpass: 3600 });
+      chime(c, 3136, 0.05, 0.5, 0.08);
+      chime(c, 2349, 0.15, 0.45, 0.06);
+      tone(c, 1760, 0.22, 0.3, { gain: 0.04 });
+    },
   };
 
   function playSfx(name: SfxName): void {
