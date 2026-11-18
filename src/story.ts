@@ -23,6 +23,8 @@ export const STORIES: Record<StoryId, StoryPanel[]> = {
   ],
   payday: [
     { art: 'payday', speaker: 'Button', text: 'Great job! Here\'s your pay.' },
+    { art: 'payday', speaker: 'Button', text: 'Tips are for the café: tables, treats, decor.' },
+    { art: 'payday', speaker: 'Button', text: 'Your pay is all yours: food, home and dreams!' },
     { art: 'payday', text: 'His very first pay!' },
   ],
   home_intro: [
@@ -32,6 +34,64 @@ export const STORIES: Record<StoryId, StoryPanel[]> = {
   dream: [
     { art: 'dream_bike', text: 'Coin by coin... a shiny bicycle!' },
     { art: 'dream_mom', speaker: 'Mom', text: 'My little Mocha! I\'m so proud of you.' },
+  ],
+  /* ---------- v3 chapter stories ---------- */
+  phone_gift: [
+    { art: 'phone_gift', speaker: 'Button', text: 'Five happy guests! Take my old phone.' },
+    { art: 'phone_gift', speaker: 'Mocha', text: 'Now I can call Mom! Thank you!' },
+  ],
+  first_call: [
+    { art: 'phone_gift', speaker: 'Mom', text: 'Mocha? Is that you, sweetie?' },
+    { art: 'dream_mom', speaker: 'Mom', text: 'A café job! I\'m so proud of you.' },
+  ],
+  konbini_open: [
+    { art: 'konbini_open', speaker: 'Button', text: 'Hoshi Mart just opened down the street!' },
+    { art: 'konbini_open', text: 'Rice, eggs, snacks... a tiny shop of everything.' },
+    { art: 'konbini_open', speaker: 'Mocha', text: 'Now I can cook real dinners!' },
+  ],
+  table_time: [
+    { art: 'cooking_first', text: 'Three yummy meals, all by himself!' },
+    { art: 'cooking_first', speaker: 'Button', text: 'A chef needs a table. Take my spare one!' },
+  ],
+  cozy_read: [
+    { art: 'regular_gift', text: 'A squishy armchair, a good book...' },
+    { art: 'home_evening', speaker: 'Mocha', text: 'The best seat in the whole world.' },
+  ],
+  star_wish: [
+    { art: 'shooting_star', text: 'Whoosh! A star zipped past the window!' },
+    { art: 'shooting_star', speaker: 'Mocha', text: 'I wish... everyone stays happy.' },
+  ],
+  fire_dream: [
+    { art: 'new_dream', speaker: 'Mocha', text: 'I have my bicycle... what\'s next?' },
+    { art: 'new_dream', speaker: 'Cotton', text: 'Winter is coming, dear. Stay warm!' },
+    { art: 'new_dream', speaker: 'Mocha', text: 'New dream: a fireplace before the snow!' },
+  ],
+  fireplace: [
+    { art: 'fireplace_night', text: 'Crackle, crackle. The fire glows warm.' },
+    { art: 'fireplace_night', speaker: 'Mocha', text: 'Snow can come now. I\'m cozy.' },
+  ],
+  mom_dream: [
+    { art: 'regular_gift', speaker: 'Crumb', text: 'Books need a home. Here, a bookshelf!' },
+    { art: 'new_dream', speaker: 'Mocha', text: 'New dream: Mom visits my café!' },
+  ],
+  mom_visits_cafe: [
+    { art: 'mom_visits_cafe', speaker: 'Mom', text: 'So this is your café! How lovely.' },
+    { art: 'mom_visits_cafe', speaker: 'Button', text: 'Your Mocha is our best helper!' },
+    { art: 'dream_mom', speaker: 'Mom', text: 'One cocoa, please, Waiter Mocha!' },
+  ],
+  party_dream: [
+    { art: 'home_evening', text: 'Soft songs on the radio. So many friends now.' },
+    { art: 'new_dream', speaker: 'Mocha', text: 'New dream: a party for my friends!' },
+  ],
+  friends_party: [
+    { art: 'friends_party', text: 'Everyone squeezed into the tiny flat!' },
+    { art: 'friends_party', speaker: 'Button', text: 'To Mocha, our favourite bear!' },
+    { art: 'friends_party', speaker: 'Mocha', text: 'I\'m not shy with friends anymore.' },
+  ],
+  forever_cozy: [
+    { art: 'home_evening', text: 'Sixty days of coffee, friends and honey toast.' },
+    { art: 'shop_ready', speaker: 'Button', text: 'Same time tomorrow, partner?' },
+    { art: 'new_dream', speaker: 'Mocha', text: 'Yes! And a new little dream.' },
   ],
 };
 

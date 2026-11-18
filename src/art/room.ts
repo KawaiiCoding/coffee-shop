@@ -15,6 +15,7 @@ export function sceneDefs(theme: ThemeId): string {
   let motif = '';
   if (theme === 'everyday') motif = `<path transform="translate(8,8) scale(.32)" d="M0,5 C-10,-2 -6,-10 0,-5 C6,-10 10,-2 0,5z" fill="${t.wallDot}"/><circle cx="23" cy="23" r="1.6" fill="${t.wallDot}"/>`;
   if (theme === 'spring') motif = `<g transform="translate(8,8)" fill="${t.wallDot}"><circle cx="0" cy="-2.2" r="1.8"/><circle cx="2.1" cy="-0.6" r="1.8"/><circle cx="1.3" cy="1.9" r="1.8"/><circle cx="-1.3" cy="1.9" r="1.8"/><circle cx="-2.1" cy="-0.6" r="1.8"/></g><circle cx="8" cy="8" r="1" fill="#fff"/><circle cx="23" cy="23" r="1.4" fill="${t.wallDot}"/>`;
+  if (theme === 'summer') motif = `<circle cx="8" cy="8" r="2.4" fill="${t.wallDot}"/><path d="M4.5,8 h-1.6 M11.5,8 h1.6 M8,4.5 v-1.6 M8,11.5 v1.6" stroke="${t.wallDot}" stroke-width="1" stroke-linecap="round"/><path d="M19,24 q2,-2 4,0 q2,2 4,0" fill="none" stroke="${t.wallDot}" stroke-width="1.3" stroke-linecap="round"/>`;
   if (theme === 'christmas') motif = `<path d="M8,4 v8 M4,8 h8 M5.2,5.2 l5.6,5.6 M10.8,5.2 l-5.6,5.6" stroke="${t.wallDot}" stroke-width="1.2" stroke-linecap="round"/><circle cx="23" cy="23" r="1.6" fill="${t.wallDot}"/>`;
   if (theme === 'halloween') motif = `<path transform="translate(8,8) scale(.5)" d="M0,-6 Q0.8,-0.8 6,0 Q0.8,0.8 0,6 Q-0.8,0.8 -6,0 Q-0.8,-0.8 0,-6z" fill="${t.wallDot}"/><circle cx="23" cy="23" r="1.3" fill="${t.wallDot}"/>`;
   const vig = theme === 'halloween' ? '#1c0f2e' : theme === 'christmas' ? '#3a2030' : '#6b3a2a';
@@ -30,6 +31,7 @@ function skyStops(theme: ThemeId): string {
   const s: Record<ThemeId, [string, string]> = {
     everyday: ['#a9dcf2', '#e4f5fb'],
     spring: ['#f9cfdc', '#fdf0f3'],
+    summer: ['#74c4ee', '#d6f0fb'],
     christmas: ['#22365e', '#4a6a9c'],
     halloween: ['#2f2158', '#a0598a'],
   };
@@ -100,6 +102,18 @@ function door(theme: ThemeId): string {
   return s;
 }
 
+/** Sunflower petal ring (one path): 10 rounded points around (x,y). */
+function sunPetals(x: number, y: number, r: number): string {
+  let d = '';
+  for (let i = 0; i < 10; i++) {
+    const a0 = (i / 10) * Math.PI * 2, am = a0 + Math.PI / 10, a1 = a0 + Math.PI / 5;
+    const ri = r * 0.5;
+    if (i === 0) d += `M${n(x + Math.cos(a0) * ri)},${n(y + Math.sin(a0) * ri)} `;
+    d += `Q${n(x + Math.cos(am) * r * 1.25)},${n(y + Math.sin(am) * r * 1.25)} ${n(x + Math.cos(a1) * ri)},${n(y + Math.sin(a1) * ri)} `;
+  }
+  return d + 'z';
+}
+
 function windowView(theme: ThemeId): string {
   const sky = `<rect x="118" y="64" width="86" height="88" fill="url(#${id('sky', theme)})"/>`;
   if (theme === 'everyday') {
@@ -120,6 +134,21 @@ function windowView(theme: ThemeId): string {
       + `<path d="${blob(133, 96, 6, 5)} ${blob(158, 96, 7, 5)} ${blob(166, 110, 5, 4)}" fill="#fbd8e2"/>`
       + `<path d="${blob(190, 84, 9, 3.5)} ${blob(184, 82, 5, 3)}" fill="#fff" opacity=".9"/>`
       + `<g fill="#f6b6c8"><path d="M184,120 q3,-3 6,0 q-3,3 -6,0z"/><path d="M194,132 q3,-3 6,0 q-3,3 -6,0z"/><path d="M174,134 q3,-3 6,0 q-3,3 -6,0z"/></g>`;
+  }
+  if (theme === 'summer') {
+    const flower = (x: number, y: number, r: number) =>
+      `<path d="${sunPetals(x, y, r)}" fill="#f9c846"/><circle cx="${x}" cy="${y}" r="${n(r * 0.42)}" fill="#9a6a4a"/>`;
+    return sky
+      + `<circle cx="186" cy="82" r="16" fill="#fff4b8" opacity=".45"/><circle cx="186" cy="82" r="9" fill="#ffe066"/>`
+      + `<path d="${blob(138, 82, 12, 5)} ${blob(148, 78, 8, 6)} ${blob(130, 80, 6, 4)}" fill="#fff"/>`
+      + `<path d="${blob(176, 100, 8, 3)} ${blob(182, 98, 5, 3)}" fill="#fff" opacity=".85"/>`
+      + `<path d="M116,118 C140,116 180,119 206,117 L206,138 L116,138z" fill="#5fb4dc"/>`
+      + `<path d="M122,124 q4,-2 8,0 M150,128 q4,-2 8,0 M178,123 q4,-2 8,0" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="1.2" stroke-linecap="round"/>`
+      + `<path d="M140,116 h12 l-2,3 h-8z" fill="#f39aa6"/><path d="M146,115 V105 L152,114z" fill="#fff"/>`
+      + `<path d="M116,134 C140,130 176,136 206,131 L206,156 L116,156z" fill="#f6dfa4"/>`
+      + `<path d="M127,156 C127,146 128,140 129,134 M195,156 C195,148 194,142 193,136" fill="none" stroke="#6aa883" stroke-width="2.2"/>`
+      + `<path d="M128,146 q-5,-3 -7,1 q4,2 7,-1z M194,147 q5,-3 7,1 q-4,2 -7,-1z" fill="#7fb894"/>`
+      + flower(129, 132, 6.5) + flower(193, 134, 5.5);
   }
   if (theme === 'christmas') {
     const R = rng(77);
@@ -183,6 +212,18 @@ function sillItems(theme: ThemeId): string {
       + sh('M188,128 C188,123 191,122 192,124 C193,122 195,123 195,128 C195,131 188,131 188,128z', '#f6b6c8', 1.2)
       + sh('M193,124 C193,119 196,118 197,120 C198,118 200,119 200,124 C200,127 193,127 193,124z', '#f9d77e', 1.2)
       + sh('M199,129 C199,124 202,123 203,125 C204,123 206,124 206,129 C206,132 199,132 199,129z', '#f6b6c8', 1.2);
+  }
+  if (theme === 'summer') {
+    // watermelon slice on the right, iced barley tea on the left
+    return sh('M197,131 L186,146 C190,151.5 204,151.5 208,146z', '#7fc48e', 1.6)
+      + fl('M197,132.6 L187.6,145.6 C191.4,149.6 202.6,149.6 206.4,145.6z', '#fff6e0')
+      + fl('M197,134 L189,145 C192.4,147.8 201.6,147.8 205,145z', '#f27f8f')
+      + `<g fill="#4a332b"><ellipse cx="195" cy="140" rx=".8" ry="1.1"/><ellipse cx="199" cy="141" rx=".8" ry="1.1"/><ellipse cx="193" cy="144" rx=".8" ry="1.1"/><ellipse cx="197.2" cy="144.6" rx=".8" ry="1.1"/><ellipse cx="201.4" cy="144.2" rx=".8" ry="1.1"/></g>`
+      + ln('M133,139 L137,129', 1.6, '#f39aa6')
+      + sh('M126,138 C126,144 126.5,148 127.5,150 L134.5,150 C135.5,148 136,144 136,138z', '#e3f4f8', 1.5)
+      + fl('M127,142 C127,145 127.5,148 128.2,149.2 L133.8,149.2 C134.5,148 135,145 135,142z', '#d39a62', 0.85)
+      + fl(box(128, 141, 3.4, 3.2, 0.8, 0.2), '#ffffff', 0.85) + fl(box(131.4, 143.6, 3, 3, 0.8, 0.2), '#ffffff', 0.75)
+      + `<path d="M128,140 v6" stroke="#fff" stroke-opacity=".8" stroke-width="1"/>`;
   }
   if (theme === 'christmas') {
     return `<path d="M108,151 C130,147 170,149 214,150 C212,154 110,154 108,151z" fill="#ffffff"/>`
@@ -296,6 +337,43 @@ function springExtras(): string {
   return s;
 }
 
+function summerExtras(): string {
+  // glass wind chime (furin) hanging from the curtain rod, with a little painted wave
+  let s = ln('M142,58 L142,66.5', 1.1)
+    + sh('M135,75 C135,69 138,66 142,66 C146,66 149,69 149,75 C146,76.2 138,76.2 135,75z', '#eaf7fb', 1.6)
+    + ln('M137,72.4 q1.6,-1.6 3.2,0 q1.6,1.6 3.2,0 q1.6,-1.6 3.2,0', 1.1, '#e8697e')
+    + `<path d="M138,69.5 q1.5,-2 4,-2.4" fill="none" stroke="#fff" stroke-width="1.2"/>`
+    + ln('M142,75.5 L142,81', 0.9)
+    + sh('M139.6,81 L144.6,81 L145.6,94 L140.4,94z', '#f39aa6', 1.2)
+    + `<path d="M141,85 h3.8 M141.4,89 h3.8" stroke="#fff" stroke-opacity=".7" stroke-width=".9"/>`;
+  // sunflowers in a striped pot by the door
+  const bloom = (x: number, y: number, r: number) =>
+    sh(sunPetals(x, y, r), '#f9c846', 1.3) + sh(blob(x, y, r * 0.44, r * 0.42), '#9a6a4a', 1.1)
+    + `<circle cx="${n(x - r * 0.12)}" cy="${n(y - r * 0.12)}" r="${n(r * 0.1)}" fill="#c99872"/>`;
+  s += `<ellipse cx="11" cy="266" rx="13" ry="3" fill="${INK}" opacity=".15"/>`
+    + ln('M7,252 C6,242 4,232 3,224 M12,252 C12,240 13,228 14,216 M17,252 C19,246 21,241 23,237', 1.8, '#6aa883')
+    + sh('M12,240 C17,236 22,237 23,240 C19,243 15,243 12,240z', '#8fc3a7', 1.3)
+    + sh('M6,244 C1,241 -3,243 -3,245 C0,247 4,247 6,244z', '#7fb894', 1.3)
+    + bloom(3, 222, 6) + bloom(14, 213, 7) + bloom(23, 235, 5)
+    + sh('M0,250 C1,258 3,264 5,265 C10,266 13,266 18,265 C20,264 22,258 23,250z', '#8fcaee', 1.8)
+    + `<path d="M1.6,255 h20 M2.6,260 h18" stroke="#fff" stroke-opacity=".75" stroke-width="1.4"/>`;
+  // little electric fan by the door
+  let cage = '';
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    cage += `M110,236 L${n(110 + Math.cos(a) * 9.5)},${n(236 + Math.sin(a) * 9.5)} `;
+  }
+  s += `<ellipse cx="110" cy="266" rx="10" ry="2.6" fill="${INK}" opacity=".15"/>`
+    + sh(blob(110, 263, 8, 2.8), '#fff6ea', 1.6)
+    + ln('M110,262 L110,246', 3.4) + ln('M110,262 L110,246', 1.6, '#a9dcc9')
+    + sh(blob(110, 236, 11, 11), '#eaf7fb', 1.8)
+    + sh('M110,236 C108,230 109,227 112,227.5 C114,229 113,233 110,236z M110,236 C115,233 118,234 117.5,237 C116,239.5 112,239 110,236z M110,236 C108,241 105,242 103.5,240 C103,237.5 106,236 110,236z', '#a9dcc9', 1.1)
+    + `<path d="${cage}" fill="none" stroke="${INK}" stroke-opacity=".35" stroke-width=".8"/>`
+    + sh(blob(110, 236, 2.4, 2.4), '#f39aa6', 1.1)
+    + `<path transform="translate(117,250) scale(.4)" d="M0,5 C-10,-2 -6,-10 0,-5 C6,-10 10,-2 0,5z" fill="#e8697e"/>`;
+  return s;
+}
+
 function everydayExtras(): string {
   // potted fern by the door with a tiny face
   return `<ellipse cx="11" cy="266" rx="13" ry="3" fill="${INK}" opacity=".15"/>`
@@ -318,6 +396,7 @@ export function roomBack(theme: ThemeId): string {
   if (theme === 'christmas') s += christmasExtras();
   if (theme === 'halloween') s += halloweenExtras();
   if (theme === 'spring') s += springExtras();
+  if (theme === 'summer') s += summerExtras();
   if (theme === 'everyday') s += everydayExtras();
   return `<g stroke-linecap="round" stroke-linejoin="round">${s}</g>`;
 }
@@ -334,6 +413,7 @@ function particles(seed: number, count: number, spMin: number, spMax: number): P
 const PETALS = particles(901, 16, 16, 28);
 const SNOW = particles(733, 30, 14, 30);
 const MOTES = particles(555, 8, 3, 7);
+const BUBBLES = particles(424, 9, 9, 16);
 
 /** Things drawn over everything (theme particles, tint, vignette). */
 export function roomFront(theme: ThemeId, time: number): string {
@@ -352,6 +432,23 @@ export function roomFront(theme: ThemeId, time: number): string {
       const rot = n((time * 70 * (p.r > 0.5 ? 1 : -1) + p.ph * 57) % 360);
       const sq = n(0.55 + 0.45 * Math.abs(Math.sin(time * 2 + p.ph)));
       s += `<path transform="translate(${x},${y}) rotate(${rot}) scale(${n(0.8 + p.r * 0.6)},${sq})" d="M0,-3.4 C3,-3.4 4.4,0.8 0,4 C-4.4,0.8 -3,-3.4 0,-3.4z" fill="${cols[p.c]}" opacity=".9"/>`;
+    }
+  } else if (theme === 'summer') {
+    // a few soap-bubble glints drifting upward, plus a soft twinkle in the window light
+    let rings = '', glints = '';
+    for (const p of BUBBLES) {
+      const y = n(H + 20 - ((p.y + time * p.sp) % span));
+      const x = n(p.x + Math.sin(time * 0.6 + p.ph) * p.sway);
+      const r = n(2.2 + p.r * 2.6);
+      rings += `<circle cx="${x}" cy="${y}" r="${r}"/>`;
+      glints += `M${n(x - r * 0.4)},${n(y - r * 0.4)}h0.01 `;
+    }
+    s += `<g fill="#ffffff" fill-opacity=".12" stroke="#ffffff" stroke-opacity=".55" stroke-width="1">${rings}</g>`
+      + `<path d="${glints}" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".85"/>`;
+    for (let i = 0; i < 3; i++) {
+      const op = n(0.15 + 0.35 * Math.max(0, Math.sin(time * 1.1 + i * 2.1)));
+      const gx = [140, 178, 206][i], gy = [300, 340, 380][i];
+      s += `<path transform="translate(${gx},${gy}) scale(.6)" d="M0,-6 Q0.8,-0.8 6,0 Q0.8,0.8 0,6 Q-0.8,0.8 -6,0 Q-0.8,-0.8 0,-6z" fill="#fffbe0" opacity="${op}"/>`;
     }
   } else if (theme === 'christmas') {
     let d = '';

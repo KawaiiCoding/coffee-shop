@@ -2,6 +2,7 @@
 import type {
   DecorDef, DecorId, DecorSlot, MenuItemDef, MenuItemId, ThemeDef, ThemeId, UpgradeDef, UpgradeId,
 } from '../types';
+import { autoTheme } from './calendar';
 
 export const MENU: MenuItemDef[] = [
   { id: 'latte', name: 'Latte', price: 6, brewSeconds: 2.5 },
@@ -48,8 +49,9 @@ export const DECOR: DecorDef[] = [
 ];
 
 export const THEMES: ThemeDef[] = [
-  { id: 'everyday', name: 'Everyday', months: [1, 2, 6, 7, 8, 9, 11] },
+  { id: 'everyday', name: 'Everyday', months: [1, 2, 9, 11] },
   { id: 'spring', name: 'Spring Blossom', months: [3, 4, 5], specialItem: 'sakura_latte' },
+  { id: 'summer', name: 'Summer Breeze', months: [6, 7, 8] },
   { id: 'halloween', name: 'Halloween', months: [10], specialItem: 'pumpkin_latte' },
   { id: 'christmas', name: 'Christmas', months: [12], specialItem: 'gingerbread_latte' },
 ];
@@ -61,14 +63,13 @@ export const STARTER_DECOR: Record<DecorSlot, DecorId> = {
 export const menuDef = (id: MenuItemId): MenuItemDef => MENU.find((m) => m.id === id)!;
 export const upgradeDef = (id: UpgradeId): UpgradeDef | undefined => UPGRADES.find((u) => u.id === id);
 export const decorDef = (id: DecorId): DecorDef | undefined => DECOR.find((d) => d.id === id);
-export const themeDef = (id: ThemeId): ThemeDef => THEMES.find((t) => t.id === id)!;
+export const themeDef = (id: ThemeId): ThemeDef => THEMES.find((t) => t.id === id) ?? THEMES[0];
 export const isFood = (id: MenuItemId): boolean => menuDef(id).brewSeconds === 0;
 
-/** 'auto' resolves by calendar month. */
+/** 'auto' resolves by the real-world calendar (festival lead-up first, else season). */
 export function resolveTheme(theme: ThemeId | 'auto', date: Date): ThemeId {
   if (theme !== 'auto') return theme;
-  const m = date.getMonth() + 1;
-  return THEMES.find((t) => t.months.includes(m))?.id ?? 'everyday';
+  return autoTheme(date);
 }
 
 /** Items guests can order now (unlocked, non-festival) plus the theme's special. */

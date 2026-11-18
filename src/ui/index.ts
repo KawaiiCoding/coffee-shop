@@ -9,9 +9,12 @@ import {
   dayEndHtml, displayDay, SHEET_TITLES, sheetBodyHtml, titleHtml, type SheetKind, type UiState,
 } from './sheets';
 import {
-  bonusText, choreProgress, dreamHtml, homeDockHtml, sleepHtml, storyHtml,
-  TUTORIAL_COUNT, tutorialDoneHtml, tutorialHtml,
+  choreProgress, currentGoal, homeChipHtml, homeDockHtml, homeLock, storyHtml,
+  TUTORIAL_COUNT, tutorialDoneHtml, tutorialHtml, type HomeUi,
 } from './screens';
+import { mountExtras, type Extras } from './extras';
+import { mountJournal, type JournalUI } from './x-journal';
+import { mountNews, type NewsUI } from './x-news';
 import { burst, icon, pulseClass, qs } from './util';
 
 export { createAudio } from './audio';
@@ -24,6 +27,10 @@ export interface MountedUI {
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** What the UI shows: the game mode, except the konbini (mode 'konbini', or scene 'konbini' while at home). */
+type View = GameState['mode'];
+const viewOf = (s: GameState): View => (s.mode === 'konbini' || (s.mode === 'home' && s.scene === 'konbini') ? 'konbini' : s.mode);
 const NAV: { id: 'cafe' | SheetKind; label: string; icon: Parameters<typeof icon>[0] }[] = [
   { id: 'cafe', label: 'Café', icon: 'cafe' },
   { id: 'upgrades', label: 'Upgrades', icon: 'shop' },
@@ -46,7 +53,7 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
                 <i class="bar-fill"></i><span class="bar-closed">Closed</span>
               </div>
             </div>
-            <div class="hud-coins"><span class="sr-only">Coins</span>${icon('coin')}<b>0</b></div>
+            <div class="hud-coins coin-pill" title="Café coins"><span class="sr-only">Café coins</span>${icon('coin')}<b>0</b></div>
           </header>
           <header class="hud hud-ready" hidden>
             <button class="ibtn" data-act="open" data-sheet="settings" aria-label="Settings">${icon('settings')}</button>
@@ -67,18 +74,23 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
                 ${icon('smile')}<span class="mbar"><i></i></span><b>0</b>
               </div>
             </div>
-            <div class="hud-coins hud-wallet"><span class="sr-only">Wallet</span>${icon('purse')}<b>0</b></div>
+            <div class="hud-coins pay-pill" title="Mocha's pay"><span class="sr-only">Pay</span><span class="pill-lbl" aria-hidden="true">Pay</span>${icon('pay')}<b>0</b></div>
           </header>
-          <div class="home-bonus" hidden></div>
+          <header class="hud hud-konbini" hidden>
+            <button class="btn btn-small btn-leave" data-act="leave-konbini" data-focus="leave" aria-label="Leave Hoshi Mart and walk home">${icon('back')}<span>Leave</span></button>
+            <div class="hud-mid konbini-title">${icon('konbini')}<span class="hud-day">Hoshi Mart</span></div>
+            <div class="hud-coins pay-pill" title="Mocha's pay"><span class="sr-only">Pay</span><span class="pill-lbl" aria-hidden="true">Pay</span>${icon('pay')}<b>0</b></div>
+          </header>
+          <div class="home-chips" hidden></div>
           <div class="float-top">
             <div class="tut" hidden></div>
-            <div class="hint" hidden></div>
             <div class="toasts" role="status" aria-live="polite"></div>
           </div>
+          <div class="float-bottom"><div class="hint" hidden></div></div>
           <section class="screen screen-title" hidden></section>
           <section class="screen screen-dayend" hidden></section>
           <div class="home-bottom" hidden>
-            <div class="home-row"><div class="dream-wrap"></div><div class="sleep-wrap"></div></div>
+            <div class="dock-more" role="group" aria-label="More things to do" hidden></div>
             <nav class="dock" aria-label="Things to do at home"></nav>
           </div>
           <section class="screen-story" hidden aria-label="Story"></section>
@@ -125,15 +137,15 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
   const readyFill = qs(readyBar, '.bar-fill');
   const tutEl = qs(root, '.tut');
   const homeTop = qs(root, '.hud-home');
-  const wallet = qs(homeTop, '.hud-wallet');
-  const walletN = qs(wallet, 'b');
+  const konbiniTop = qs(root, '.hud-konbini');
+  const payPills = Array.from(root.querySelectorAll<HTMLElement>('.pay-pill'));
   const energyEl = qs(homeTop, '.stat-energy');
   const happyEl = qs(homeTop, '.stat-happy');
-  const bonusEl = qs(root, '.home-bonus');
+  const chipsEl = qs(root, '.home-chips');
   const homeBottom = qs(root, '.home-bottom');
-  const dreamWrap = qs(root, '.dream-wrap');
-  const sleepWrap = qs(root, '.sleep-wrap');
+  const moreEl = qs(root, '.dock-more');
   const dock = qs(root, '.dock');
+
   const storyEl = qs(root, '.screen-story');
 
   /* ---------------------------- scene svg ---------------------------- */
@@ -198,7 +210,21 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
   for (const ev of ['pointerdown', 'touchend', 'click', 'keydown']) root.addEventListener(ev, unlock, { capture: true });
 
   /* ------------------------------ ui state ------------------------------ */
-  const ui: UiState = { decorSlot: 'ceiling', confirmTitle: false, confirmReset: false };
+  const ui: UiState = { decorSlot: 'ceiling', confirmTitle: false, confirmReset: false, upTab: 'cafe', decorPreview: null };
+  const homeUi: HomeUi = { more: false, chip: false };
+
+  /* ------------------------------ extras ------------------------------ */
+  // Konbini basket bar, recipe picker, popups and the calendar live in extras.ts, mounted into
+  // .cs-ui (same stacking context). Its z-indexes: konbini bar 20, its sheets 45 (above ours at 40),
+  // popups 60 (above everything here). It uses data-x attributes, so our data-act handler ignores it.
+  let extras: Extras = { frame() {}, openRecipes() {}, openCalendar() {} };
+  try { extras = mountExtras(uiEl, game, audio); } catch (err) { console.error('extras failed to mount', err); }
+  // Mocha's journal and the newspaper: own sheets at z 45 (x-journal.ts / x-news.ts, data-j / data-n attributes).
+  let journal: JournalUI = { open() {}, frame() {} };
+  let news: NewsUI = { open() {}, frame() {} };
+  try { journal = mountJournal(uiEl, game, audio); } catch (err) { console.error('journal failed to mount', err); }
+  try { news = mountNews(uiEl, game, audio); } catch (err) { console.error('news failed to mount', err); }
+  const ex = (f: () => void) => { try { f(); } catch (err) { console.error(err); } };
   let open: SheetKind | null = null;
   let opener: HTMLElement | null = null;
   let deferRefresh = false;
@@ -257,6 +283,7 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
     open = kind;
     ui.confirmTitle = false;
     ui.confirmReset = false;
+    if (kind === 'decor') ui.decorPreview = null;
     layer.hidden = false;
     layer.dataset.kind = kind;
     sheet.classList.remove('in');
@@ -287,11 +314,15 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
   }
 
   function focusScreen(): void {
+    // Auto-focus after a sheet/popup closes: no focus ring (it boxed the Sleep / Leave buttons on touch screens).
+    const opts = { preventScroll: true, focusVisible: false } as FocusOptions;
     const m = game.state.mode;
     const el = m === 'title' ? titleEl : m === 'dayEnd' ? dayEndEl : null;
+    const v = viewOf(game.state);
+    if (v === 'konbini') { (konbiniTop.querySelector('[data-focus="leave"]') as HTMLElement | null)?.focus(opts); return; }
     const sel = m === 'story' ? '[data-focus="story-next"]' : m === 'home' ? '[data-focus="act-sleep"]' : '[data-focus="start"]';
     ((el ?? (m === 'story' ? storyEl : m === 'home' ? homeBottom : null))
-      ?.querySelector(sel) as HTMLElement | null)?.focus({ preventScroll: true });
+      ?.querySelector(sel) as HTMLElement | null)?.focus(opts);
   }
 
   /* --------------------------- settings / audio --------------------------- */
@@ -318,7 +349,7 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
       case 'pause': tap(); game.pause(); sync(); break;
       case 'resume': tap(); hideSheet(); game.resume(); sync(); break;
       case 'start': tap(); if (open) hideSheet(); game.startDay(); sync(); break;
-      case 'open': tap(); openSheet(t.dataset.sheet as SheetKind, t); break;
+      case 'open': tap(); homeUi.more = false; last.home = ''; openSheet(t.dataset.sheet as SheetKind, t); break;
       case 'nav': {
         tap();
         const k = t.dataset.sheet as 'cafe' | SheetKind;
@@ -330,6 +361,13 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
       case 'story-skip': tap(); game.storySkip(); sync(); break;
       case 'go-home': tap(); if (open) hideSheet(); game.goHome(); sync(); break;
       case 'home-act': homeAct(id as HomeActionId, t); break;
+      case 'home-more': tap(); homeUi.more = !homeUi.more; last.home = ''; sync(); break;
+      case 'home-chip': tap(); homeUi.chip = !homeUi.chip; last.home = ''; sync(); break;
+      case 'calendar': tap(); homeUi.more = false; last.home = ''; ex(() => extras.openCalendar()); break;
+      case 'journal': tap(); homeUi.more = false; last.home = ''; if (open) hideSheet(); ex(() => journal.open()); break;
+      case 'news': tap(); homeUi.more = false; last.home = ''; if (open) hideSheet(); ex(() => news.open()); break;
+      case 'go-konbini': tap(); homeUi.more = false; if (open) hideSheet(); ex(() => game.goTo('konbini')); sync(); break;
+      case 'leave-konbini': tap(); ex(() => game.goTo('home')); sync(); break;
       case 'home-item': {
         const h = game.state.progress.home;
         const owned = h?.owned?.includes(id as HomeItemId) ?? false;
@@ -350,7 +388,16 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
         if (ok) burst(card); else pulseClass(card, 'shake');
         break;
       }
-      case 'slot': tap(); ui.decorSlot = id as UiState['decorSlot']; refreshSheet(); break;
+      case 'slot': tap(); ui.decorSlot = id as UiState['decorSlot']; ui.decorPreview = null; refreshSheet(); break;
+      case 'up-tab': tap(); ui.upTab = id as NonNullable<UiState['upTab']>; refreshSheet(); break;
+      case 'dec-pick': {
+        // Tap a decor card: try it in the café preview (tap again to go back to the café as it is).
+        tap();
+        ui.decorPreview = ui.decorPreview === id ? null : (id as NonNullable<UiState['decorPreview']>);
+        refreshSheet();
+        if (ui.decorPreview) pulseClass(sheetBody.querySelector('.dec-preview'), 'pv-pop');
+        break;
+      }
       case 'decor': {
         const p = game.state.progress;
         const owned = p.ownedDecor.includes(id as never);
@@ -393,14 +440,24 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
 
   /* -------------------------------- home -------------------------------- */
   function homeAct(id: HomeActionId, el: HTMLElement): void {
-    let can: { ok: boolean; reason?: string } = { ok: true };
-    try { can = game.canDoHomeAction(id); } catch { /* let the engine decide */ }
-    if (!can.ok || !game.homeAction(id)) {
+    const fail = (why: string) => {
       try { audio.playSfx('error'); } catch { /* ignore */ }
       pulseClass(el, 'shake');
-      toast(can.reason || 'Not right now');
-    } else {
-      pulseClass(el, 'bump');
+      toast(why);
+    };
+    const lock = id === 'sleep' ? null : homeLock(game, id);
+    if (id === 'calendar') { tap(); homeUi.more = false; ex(() => extras.openCalendar()); }
+    else if (lock) fail(lock === 'hide' ? 'Not right now' : lock);
+    else {
+      let can: { ok: boolean; reason?: string } = { ok: true };
+      try { can = game.canDoHomeAction(id); } catch { /* let the engine decide */ }
+      if (!can.ok) fail(can.reason || 'Not right now');
+      else if (!game.homeAction(id)) { pulseClass(el, 'shake'); } // the engine already toasted why
+      else {
+        pulseClass(el, 'bump');
+        homeUi.more = false;
+        if (id === 'cook') ex(() => extras.openRecipes()); // Mocha walks to the stove, the recipe picker opens
+      }
     }
     last.home = '';
     sync();
@@ -425,7 +482,7 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
 
   // Pressed "squish" on any button.
   uiEl.addEventListener('pointerdown', (e) => {
-    const b = (e.target as Element).closest('.btn, .ibtn, .tab, .dec-card, .seg, .switch-row, .act, .sleep-btn, .story-skip');
+    const b = (e.target as Element).closest('.btn, .ibtn, .tab, .dec-card, .seg, .switch-row, .act, .home-chip, .cal-chip, .story-skip');
     if (b && !(b as HTMLButtonElement).disabled) pulseClass(b, 'squish');
   });
   uiEl.addEventListener('animationend', (e) => {
@@ -439,7 +496,9 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
   /* ------------------------------ keyboard ------------------------------ */
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (open) { e.preventDefault(); closeSheet(); } else if (game.state.mode === 'playing') { game.pause(); sync(); }
+      if (open) { e.preventDefault(); closeSheet(); }
+      else if (homeUi.more || homeUi.chip) { e.preventDefault(); homeUi.more = false; homeUi.chip = false; last.home = ''; sync(); }
+      else if (game.state.mode === 'playing') { game.pause(); sync(); }
       return;
     }
     if (!open && game.state.mode === 'story' && (e.key === 'ArrowRight' || e.key === 'PageDown')) {
@@ -457,19 +516,38 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
   });
 
   /* ------------------------------- toasts ------------------------------- */
+  /** One short message at a time, never over a story page or a popup, and no repeats. */
+  let lastToast = '', lastToastAt = 0;
   function toast(text: string): void {
+    const s = game.state;
+    if (s.mode === 'story' || s.popup) return;               // never cover a story or a popup
+    const now = performance.now();
+    if (text === lastToast && now - lastToastAt < 3000) return; // don't repeat the same message
+    lastToast = text; lastToastAt = now;
+    toasts.replaceChildren();                                  // only one visible at a time
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = text;
     toasts.appendChild(el);
-    while (toasts.children.length > 3) toasts.firstElementChild?.remove();
-    setTimeout(() => el.classList.add('out'), 2300);
-    setTimeout(() => el.remove(), 2700);
+    setTimeout(() => el.classList.add('out'), 1900);
+    setTimeout(() => el.remove(), 2300);
   }
 
   game.subscribe((e) => {
+    // a story or popup takes over the screen: clear any message still showing
+    if ((game.state.mode === 'story' || game.state.popup) && toasts.childElementCount) toasts.replaceChildren();
     if (e.type === 'toast') toast(e.text);
     else if (e.type === 'progress') queueRefresh();
+    else if ((e as { type: string }).type === 'sheet') {
+      // The player tapped the stove / calendar in the home scene.
+      const k = (e as unknown as { sheet?: string }).sheet;
+      homeUi.more = false; last.home = '';
+      if (open) hideSheet();
+      if (k === 'cook') ex(() => extras.openRecipes());
+      else if (k === 'calendar') ex(() => extras.openCalendar());
+      else if (k === 'news') ex(() => news.open());
+      else if (k === 'journal') ex(() => journal.open());
+    }
   });
 
   /* ---------------------------- theme colours ---------------------------- */
@@ -495,10 +573,10 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
 
   /* -------------------------------- frame -------------------------------- */
   const last = {
-    mode: '' as GameState['mode'] | '', theme: '' as ThemeId | '', day: -1, coins: -1,
+    mode: '' as View | '', theme: '' as ThemeId | '', day: -1, coins: -1,
     k: -1, door: null as boolean | null, hint: null as string | null,
     story: '', chores: '', tut: '', tutDone: [] as boolean[],
-    home: '', wallet: -1, bonus: '',
+    home: '', wallet: -1,
   };
   let tutShown = false;
   let tutTimer = 0;
@@ -511,8 +589,9 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
     hudCoinsN.textContent = String(c);
   }
 
-  function onMode(prev: GameState['mode'] | '', m: GameState['mode']): void {
-    root.dataset.mode = m;
+  function onMode(prev: View | '', v: View): void {
+    root.dataset.mode = v;
+    const m = game.state.mode;
     const play = m === 'playing' || m === 'paused';
     hud.hidden = !play;
     pauseBtn.hidden = m !== 'playing';
@@ -521,9 +600,11 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
     dayEndEl.hidden = m !== 'dayEnd';
     storyEl.hidden = m !== 'story';
     readyBar.hidden = m !== 'cleanup';
-    homeTop.hidden = m !== 'home';
-    bonusEl.hidden = m !== 'home';
-    homeBottom.hidden = m !== 'home';
+    homeTop.hidden = v !== 'home';
+    chipsEl.hidden = v !== 'home';
+    homeBottom.hidden = v !== 'home';
+    konbiniTop.hidden = v !== 'konbini';
+    if (v !== 'home') { homeUi.more = false; homeUi.chip = false; }
     if (!play) hideTutorial();
     if (open && m !== 'paused') hideSheet();
     if (m === 'paused' && !open) openSheet('pause', pauseBtn);
@@ -532,7 +613,7 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
     setNavActive();
     last.day = -1; // force HUD refresh
     if (prev !== '' && !open && m !== 'playing' && m !== 'cleanup') {
-      queueMicrotask(() => { if (!open && game.state.mode === m) focusScreen(); });
+      queueMicrotask(() => { if (!open && viewOf(game.state) === v) focusScreen(); });
     }
   }
 
@@ -599,25 +680,34 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
     el.classList.toggle('high', n >= 70);
   }
 
+  /** Mocha's pay, shown in the home and konbini top bars. */
+  function syncPay(s: GameState): void {
+    const w = s.progress.home?.wallet ?? 0;
+    if (w === last.wallet) return;
+    for (const el of payPills) {
+      if (last.wallet >= 0 && w > last.wallet && !el.closest('[hidden]')) pulseClass(el, 'bump');
+      (el.querySelector('b') as HTMLElement).textContent = String(w);
+    }
+    last.wallet = w;
+  }
+
   function syncHome(s: GameState): void {
     const h = s.progress.home;
     if (!h) return;
-    if (h.wallet !== last.wallet) {
-      if (last.wallet >= 0 && h.wallet > last.wallet) pulseClass(wallet, 'bump');
-      last.wallet = h.wallet;
-      walletN.textContent = String(h.wallet);
-    }
+    const g = currentGoal(game);
     const key = [h.wallet, h.savings, h.dreamGoal, h.dreamDone, Math.round(h.energy), Math.round(h.happiness),
-      (h.doneToday ?? []).join(), s.homeBear?.action ?? '', s.homeBear?.actionTimer ? 1 : 0].join('|');
+      (h.doneToday ?? []).join(), s.homeBear?.action ?? '', s.homeBear?.actionTimer ? 1 : 0,
+      (h.furniture ?? []).join(), h.meal ?? '', h.books ?? 0, h.fireOn ? 1 : 0, s.progress.konbiniOpen ? 1 : 0,
+      g ? `${g.chapter}:${g.goal}:${Math.round((g.progress || 0) * 100)}` : '', homeUi.more ? 1 : 0, homeUi.chip ? 1 : 0].join('|');
     if (key === last.home) return;
     last.home = key;
     setMeter(energyEl, h.energy);
     setMeter(happyEl, h.happiness);
-    const b = bonusText(game);
-    if (b !== last.bonus) { last.bonus = b; bonusEl.textContent = b; }
-    render(dreamWrap, dreamHtml(h));
-    render(sleepWrap, sleepHtml(game));
-    render(dock, homeDockHtml(game));
+    render(chipsEl, homeChipHtml(game, homeUi.chip));
+    const d = homeDockHtml(game, homeUi);
+    render(dock, d.row);
+    render(moreEl, d.more);
+    moreEl.hidden = !homeUi.more;
   }
 
   /** Cheap per-frame sync: only touches the DOM when a value changed. */
@@ -628,12 +718,14 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
       applyTheme(s.theme);
       if (last.mode) { refreshScreens(); refreshSheet(); }
     }
-    if (s.mode !== last.mode) {
+    const v = viewOf(s);
+    if (v !== last.mode) {
       const prev = last.mode;
-      last.mode = s.mode;
-      onMode(prev, s.mode);
+      last.mode = v;
+      onMode(prev, v);
     }
     syncCoins();
+    syncPay(s);
     if (s.mode === 'playing' || s.mode === 'paused') {
       const day = displayDay(game);
       if (day !== last.day) { last.day = day; hudDay.textContent = `Day ${day}`; }
@@ -657,10 +749,14 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
         if (first && !open) (storyEl.querySelector('[data-focus="story-next"]') as HTMLElement | null)?.focus({ preventScroll: true });
       }
     } else if (s.mode === 'cleanup') syncCleanup(s);
-    else if (s.mode === 'home') syncHome(s);
+    else if (v === 'home') syncHome(s);
     syncTutorial(s);
-    const hintMode = s.mode === 'playing' || s.mode === 'cleanup' || s.mode === 'home';
-    const h = hintMode && s.hint && s.hint.text && s.progress.settings.hints !== false ? s.hint.text : null;
+    ex(() => extras.frame());
+    ex(() => journal.frame());
+    ex(() => news.frame());
+    const hintMode = s.mode === 'playing' || s.mode === 'cleanup' || v === 'home' || v === 'konbini';
+    const h = hintMode && s.hint && s.hint.text
+      && (s.progress.settings.hints !== false || (s.mode === 'playing' && s.tutorial.active)) ? s.hint.text : null;
     if (h !== last.hint) {
       last.hint = h;
       hint.hidden = !h;

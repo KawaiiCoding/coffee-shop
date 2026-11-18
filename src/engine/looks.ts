@@ -49,3 +49,10 @@ export const WAITER_LOOK: CharacterLook = {
 export const BARISTA_LOOK: CharacterLook = {
   species: 'cat', color: '#f4d6dc', accessory: 'apron', accentColor: '#8fc3a7', apronColor: '#8fc3a7', hat: 'none',
 };
+
+/** A regular friend's fixed look, dressed up for the current festival (seasonal hat if they wear none). */
+export function regularLook(look: CharacterLook, theme: ThemeId): CharacterLook {
+  if (look.hat !== 'none') return { ...look };
+  const hat: HatKind = theme === 'christmas' ? 'santa' : theme === 'halloween' ? 'witch' : theme === 'spring' ? 'flowercrown' : 'none';
+  return { ...look, hat };
+}

@@ -21,6 +21,17 @@ const santaHat = (x: number, y: number, s = 1) =>
 const pumpkin = (x: number, y: number) =>
   sh(blob(x, y, 5.5, 4.4, 0.2), '#f2a65a', 1.8) + ln(`M${x},${y - 4} q0,4 0,8`, 1.2) + ln(`M${x},${y - 4.2} q1,-2 2.5,-2.6`, 1.6, '#7a9a5a');
 
+/** Tiny scallop sea shell. */
+const seaShell = (x: number, y: number) =>
+  sh(`M${x - 4},${y + 2} C${x - 5},${y - 3} ${x - 2},${y - 5} ${x},${y - 5} C${x + 2},${y - 5} ${x + 5},${y - 3} ${x + 4},${y + 2}z`, '#fbd3c4', 1.4)
+  + ln(`M${x},${y + 1.6} L${x},${y - 4} M${x - 2},${y + 1.6} L${x - 2.4},${y - 3} M${x + 2},${y + 1.6} L${x + 2.4},${y - 3}`, 0.9);
+
+/** Little watermelon slice (point up). */
+const melon = (x: number, y: number) =>
+  sh(`M${x},${y - 7} L${x - 6},${y + 1} C${x - 3},${y + 3.5} ${x + 3},${y + 3.5} ${x + 6},${y + 1}z`, '#7fc48e', 1.5)
+  + fl(`M${x},${y - 5.6} L${x - 4.6},${y + 0.6} C${x - 2.4},${y + 2.2} ${x + 2.4},${y + 2.2} ${x + 4.6},${y + 0.6}z`, '#f27f8f')
+  + dot(x - 1.4, y - 1, 0.7, '#4a332b') + dot(x + 1.4, y - 0.4, 0.7, '#4a332b');
+
 const petal = (x: number, y: number, fill: string) =>
   fl(`M${x},${y} q3,-3 6,0 q-3,3 -6,0z`, fill, 0.9);
 
@@ -105,6 +116,7 @@ function bookshelf(theme: ThemeId): string {
   if (theme === 'christmas') s += santaHat(13, -77, 0.7);
   if (theme === 'halloween') s += pumpkin(-20, -97);
   if (theme === 'spring') s += sh(blob(-18, -96, 3, 3), BLUSH, 1.4) + dot(-18, -96, 1, MUSTARD);
+  if (theme === 'summer') s += seaShell(-18, -94);
   return s;
 }
 
@@ -157,6 +169,7 @@ function catBed(theme: ThemeId): string {
   if (theme === 'christmas') s += santaHat(-14, -43, 0.9);
   if (theme === 'spring') s += sh(blob(-3, -44, 2.6, 2.6), MUSTARD, 1.3) + dot(-3, -44, 1, BERRY);
   if (theme === 'halloween') s += pumpkin(32, -6);
+  if (theme === 'summer') s += melon(32, -5);
   return s;
 }
 
@@ -178,6 +191,7 @@ function plant(theme: ThemeId): string {
   if (theme === 'halloween') s += pumpkin(15, -4);
   if (theme === 'spring') s += sh(blob(-17, -62, 3, 3), BLUSH, 1.4) + dot(-17, -62, 1, MUSTARD);
   if (theme === 'christmas') s += sh(blob(16, -66, 2.6, 2.6), BERRY, 1.4) + sh(blob(1, -78, 2.4, 2.4), MUSTARD, 1.3);
+  if (theme === 'summer') s += sh(blob(-17, -62, 3.4, 3.4), '#f9c846', 1.4) + dot(-17, -62, 1.3, '#9a6a4a');
   return s;
 }
 
@@ -190,7 +204,7 @@ function lamp(theme: ThemeId): string {
   // glowing bulb under shade
   s += sh(blob(0, -58, 4, 3.6), '#fff1c2', 1.6);
   // scalloped shade
-  const shade = theme === 'christmas' ? SAGE : theme === 'halloween' ? '#f2a65a' : BLUSH;
+  const shade = theme === 'christmas' ? SAGE : theme === 'halloween' ? '#f2a65a' : theme === 'summer' ? '#8fcaee' : BLUSH;
   s += sh('M-9,-79 C-4,-81 4,-81 9,-79 L17,-63 q-2.8,3.4 -5.7,0 q-2.8,3.4 -5.7,0 q-2.8,3.4 -5.6,0 q-2.8,3.4 -5.6,0 q-2.8,3.4 -5.7,0 q-2.8,3.4 -5.7,0z', shade);
   s += dot(-6, -70, 1.4, CREAM) + dot(0, -72, 1.4, CREAM) + dot(6, -70, 1.4, CREAM);
   s += ln('M-12,-66 q12,2 24,0', 1.1, '#ffffff');
@@ -211,7 +225,8 @@ function flowerVase(theme: ThemeId): string {
   s += ln('M0,-56 L-8,-68 M0,-56 L1,-74 M0,-56 L9,-66', 1.6, '#6f9d80');
   s += sh('M-3,-62 q-6,-3 -8,0 q4,4 8,0z', SAGE, 1.4);
   // flowers
-  const p = theme === 'halloween' ? ['#f2a65a', '#b79ad6', MUSTARD] : theme === 'christmas' ? [BERRY, CREAM, BERRY] : [BLUSH, MUSTARD, BERRY];
+  const p = theme === 'halloween' ? ['#f2a65a', '#b79ad6', MUSTARD] : theme === 'christmas' ? [BERRY, CREAM, BERRY]
+    : theme === 'summer' ? ['#f9c846', '#f9c846', '#8fcaee'] : [BLUSH, MUSTARD, BERRY];
   s += sh(blob(-9, -69, 4.4, 4, 0.2), p[0], 1.8) + dot(-9, -69, 1.4, MUSTARD);
   s += sh(blob(1, -75, 4.6, 4.2, -0.2), p[1], 1.8) + dot(1, -75, 1.4, '#e89a5a');
   s += sh(blob(10, -67, 4, 3.8), p[2], 1.8) + dot(10, -67, 1.3, CREAM);
@@ -223,7 +238,8 @@ function flowerVase(theme: ThemeId): string {
 
 function roundRug(theme: ThemeId): string {
   const c = theme === 'christmas' ? [BERRY, CREAM, SAGE, BERRY]
-    : theme === 'halloween' ? ['#f2a65a', '#b79ad6', MUSTARD, '#f2a65a'] : [SAGE, CREAM, BLUSH, MUSTARD];
+    : theme === 'halloween' ? ['#f2a65a', '#b79ad6', MUSTARD, '#f2a65a']
+      : theme === 'summer' ? ['#8fcaee', CREAM, '#f39aa6', '#fbe07a'] : [SAGE, CREAM, BLUSH, MUSTARD];
   let s = shadow(0, 2, 58, 21, 0.12);
   s += sh(blob(0, 0, 57, 21, 0.1), c[0]);
   s += sh(blob(0, 0, 44, 16, -0.1), c[1], 2);
@@ -238,7 +254,7 @@ function roundRug(theme: ThemeId): string {
 }
 
 function heartRug(theme: ThemeId): string {
-  const main = theme === 'halloween' ? '#b79ad6' : theme === 'christmas' ? BERRY : BLUSH;
+  const main = theme === 'halloween' ? '#b79ad6' : theme === 'christmas' ? BERRY : theme === 'summer' ? '#f39aa6' : BLUSH;
   const heart = (sx: number, sy: number) => {
     const r = (n: number) => +n.toFixed(1);
     return `M0,${r(-10 * sy)} C${r(-8 * sx)},${r(-24 * sy)} ${r(-56 * sx)},${r(-24 * sy)} ${r(-56 * sx)},${r(-6 * sy)} `
@@ -249,7 +265,7 @@ function heartRug(theme: ThemeId): string {
   let s = `<path d="${heart(1, 1)}" fill="${INK}" opacity=".12" transform="translate(0,3)"/>`;
   s += sh(heart(1, 1), main);
   s += sh(heart(0.74, 0.72), CREAM, 2);
-  s += sh(heart(0.46, 0.44), theme === 'christmas' ? SAGE : main, 1.8);
+  s += sh(heart(0.46, 0.44), theme === 'christmas' ? SAGE : theme === 'summer' ? '#a9dcc9' : main, 1.8);
   s += `<path d="${heart(0.87, 0.86)}" fill="none" stroke="${INK}" stroke-width="1.1" stroke-dasharray="2 4" opacity=".55"/>`;
   s += `<path d="${heart(0.6, 0.58)}" fill="none" stroke="${INK}" stroke-width="1" stroke-dasharray="2 3.5" opacity=".55"/>`;
   if (theme === 'spring') s += petal(-44, 8, '#ffffff') + petal(38, -12, SAGE);
@@ -258,7 +274,7 @@ function heartRug(theme: ThemeId): string {
 
 function stripeRug(theme: ThemeId): string {
   const c = theme === 'christmas' ? [BERRY, CREAM, SAGE] : theme === 'halloween' ? ['#f2a65a', '#b79ad6', CREAM]
-    : [SKY, CREAM, BLUSH];
+    : theme === 'summer' ? ['#8fcaee', CREAM, '#a9dcc9'] : [SKY, CREAM, BLUSH];
   let s = shadow(0, 3, 52, 17, 0.12);
   // tassels
   for (let i = 0; i < 6; i++) {

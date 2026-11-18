@@ -274,7 +274,8 @@ function payday(): string {
   s += envelope(164, 170, 26, -4);
   s += sh(blob(153, 172, 4.5, 4, 0.2), BUTTON.color, 1.8) + sh(blob(176, 173, 4.5, 4, 0.2), MOCHA_APRON.color, 1.8);
   s += hrt(164, 146, 0.75) + hrt(150, 132, 0.45, '#f7b6c8') + hrt(178, 126, 0.5, '#f7b6c8');
-  s += spark(140, 150, 0.6) + spark(190, 148, 0.7);
+  // sparkles float in the air above the two heads, never over a face
+  s += spark(104, 96, 0.6) + spark(228, 92, 0.7) + spark(164, 104, 0.45);
   return s;
 }
 

@@ -14,6 +14,7 @@ game.subscribe((e) => {
   if (e.type === 'sfx') audio.playSfx(e.name);
   // keeps music in sync when it's toggled from inside the café (tapping the record player)
   if (e.type === 'progress') audio.applySettings(game.state.progress.settings);
+  if (e.type === 'scene') audio.setScene(e.scene);
 });
 audio.applySettings(game.state.progress.settings);
 

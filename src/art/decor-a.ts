@@ -10,6 +10,7 @@ const r1 = (n: number) => +n.toFixed(1);
 const PALETTE: Record<ThemeId, string[]> = {
   everyday: [BLUSH, SAGE, MUSTARD, SKY, CREAM, BERRY],
   spring: [BLUSH, CREAM, '#f9cdd6', '#e88fa3', '#fdf0f2', '#c9e4cf'],
+  summer: ['#f39aa6', '#fbe07a', '#8fcaee', '#a9dcc9', CREAM, '#7fc48e'],
   christmas: ['#d9605c', '#7fb48f', CREAM, '#d9605c', '#5f9c74', CREAM],
   halloween: ['#f39a4b', '#9a7bc4', '#4f4048', '#f6b56b', '#7d62a8', '#4f4048'],
 };
@@ -53,7 +54,7 @@ function bunting(theme: ThemeId): string {
 }
 
 function stringLights(theme: ThemeId): string {
-  const glow = theme === 'halloween' ? ['#f6a35b', '#c3a3e6'] : theme === 'christmas' ? ['#ffd27a', '#f39b8f', '#a8d9b4'] : theme === 'spring' ? ['#ffe08f', '#f8c0cc'] : ['#ffd88a', '#ffe6a8'];
+  const glow = theme === 'halloween' ? ['#f6a35b', '#c3a3e6'] : theme === 'christmas' ? ['#ffd27a', '#f39b8f', '#a8d9b4'] : theme === 'spring' ? ['#ffe08f', '#f8c0cc'] : theme === 'summer' ? ['#fff0a0', '#bfe6f7', '#ffc2c9'] : ['#ffd88a', '#ffe6a8'];
   let halos = '', bulbs = '', caps = '';
   const swags: [number, number][] = [[-6, 120], [120, 240], [240, 366]];
   let wire = '', i = 0;
@@ -82,6 +83,7 @@ function paperLanterns(theme: ThemeId): string {
   const cols: Record<ThemeId, string[]> = {
     everyday: [BLUSH, MUSTARD, SKY, SAGE],
     spring: [BLUSH, CREAM, '#f9cdd6', '#e88fa3'],
+    summer: ['#f39aa6', '#fbe07a', '#8fcaee', '#a9dcc9'],
     christmas: ['#d9605c', CREAM, '#7fb48f', '#d9605c'],
     halloween: ['#f39a4b', '#9a7bc4', '#f39a4b', '#f6b56b'],
   };
@@ -125,7 +127,8 @@ function yarnBall(cx: number, cy: number, r: number, c: string, lean: number): s
 function yarnShelf(theme: ThemeId): string {
   const c = theme === 'halloween' ? ['#f39a4b', '#9a7bc4', MUSTARD]
     : theme === 'christmas' ? ['#d9605c', '#7fb48f', CREAM]
-      : theme === 'spring' ? [BLUSH, '#c9e4cf', CREAM] : [BLUSH, SAGE, MUSTARD];
+      : theme === 'spring' ? [BLUSH, '#c9e4cf', CREAM]
+        : theme === 'summer' ? ['#f39aa6', '#8fcaee', '#fbe07a'] : [BLUSH, SAGE, MUSTARD];
   return ''
     // brackets
     + sh(`M-21,15 L-21,24 Q-20,25 -19,24 L-12,16z`, WOOD_DK, 2)
@@ -143,7 +146,7 @@ function yarnShelf(theme: ThemeId): string {
 }
 
 function paintingLatte(theme: ThemeId): string {
-  const bg = theme === 'halloween' ? '#e9d6f0' : theme === 'christmas' ? '#e4f0e6' : theme === 'spring' ? '#fde3e8' : '#dfe9f7';
+  const bg = theme === 'halloween' ? '#e9d6f0' : theme === 'christmas' ? '#e4f0e6' : theme === 'spring' ? '#fde3e8' : theme === 'summer' ? '#fdf3c8' : '#dfe9f7';
   return ''
     + ln(`M-10,-23 L0,-28 L10,-23`, 1.5)
     + `<circle cx="0" cy="-28" r="1.6" fill="${INK}"/>`
@@ -164,7 +167,7 @@ function paintingLatte(theme: ThemeId): string {
 }
 
 function clockCat(theme: ThemeId): string {
-  const fur = theme === 'halloween' ? '#5a4a55' : theme === 'christmas' ? '#e9967a' : theme === 'spring' ? '#f7c6cf' : MUSTARD;
+  const fur = theme === 'halloween' ? '#5a4a55' : theme === 'christmas' ? '#e9967a' : theme === 'spring' ? '#f7c6cf' : theme === 'summer' ? '#f9b98a' : MUSTARD;
   const inner = theme === 'halloween' ? '#9a7bc4' : BLUSH;
   const head = `M-21,-4 C-21.5,-12 -19,-18 -15,-21 L-14,-29 C-10,-27 -7,-24.5 -5,-23 C-2,-23.8 2,-23.8 5,-23 `
     + `C7,-24.5 10,-27 14.5,-28.5 L15,-21 C19.5,-17.5 21.5,-12 21.2,-4 C21,8 12,15.5 0,15.6 C-12,15.5 -21.2,8 -21,-4z`;
@@ -187,7 +190,9 @@ function clockCat(theme: ThemeId): string {
     + `<circle cx="-17" cy="8" r="2" fill="${BLUSH}" opacity=".8"/><circle cx="17" cy="8" r="2" fill="${BLUSH}" opacity=".8"/>`
     // sleepy happy eyes peeking above the dial
     + ln(`M-9,-18.5 q2,-1.8 4,0 M5,-18.5 q2,-1.8 4,0`, 1.3, EYE)
-    + (theme === 'christmas' ? sh(`M-6,15 Q0,18.5 6,15 L5,18 Q0,20.5 -5,18z`, '#7fb48f', 1.6) : '');
+    + (theme === 'christmas' ? sh(`M-6,15 Q0,18.5 6,15 L5,18 Q0,20.5 -5,18z`, '#7fb48f', 1.6) : '')
+    // summer: a tiny sunflower tucked behind one ear
+    + (theme === 'summer' ? sh(`M14,-26 q3,-2.4 4.4,0.6 q2.6,1.8 -0.4,3.8 q-0.4,3 -3.4,1.6 q-3,0.8 -2.8,-2.4 q-1.6,-2.8 2.2,-3.6z`, '#f9c846', 1.2) + `<circle cx="15.6" cy="-23.6" r="1.4" fill="#9a6a4a"/>` : '');
 }
 
 export function decorA(id: DecorId, theme: ThemeId): string {

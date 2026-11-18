@@ -30,6 +30,13 @@ export const TH: Record<ThemeId, ThemeArt> = {
     accent: '#d9607e', accent2: '#a9d6a0', paper: '#fffafb', text: '#5e3540',
     curtain: '#a9d6a0', stitch: '#ffffff',
   },
+  summer: {
+    wall: '#e4f3f6', wallDot: '#c8e5ee', dado: '#a9dcc9', trim: '#5f94a3',
+    floorA: '#ecca9b', floorB: '#ddb785', door: '#f39aa6', doorWin: '#c2e9fb',
+    rug: ['#f39aa6', '#fff6d2', '#a9dcc9', '#fff6d2'], bunt: ['#f39aa6', '#fbe07a', '#a9dcc9', '#8fcaee'],
+    accent: '#e8697e', accent2: '#5fbfae', paper: '#fffdf4', text: '#4a3f3c',
+    curtain: '#fbe07a', stitch: '#ffffff',
+  },
   christmas: {
     wall: '#f3e1d0', wallDot: '#ead0ba', dado: '#c9584f', trim: '#8a4a3a',
     floorA: '#d9a877', floorB: '#c99665', door: '#4f8f68', doorWin: '#35507f',
@@ -56,5 +63,5 @@ export function palette(theme: ThemeId): ThemePalette {
 
 /** Hat a staff member wears in this theme. */
 export const THEME_HAT: Record<ThemeId, 'none' | 'santa' | 'witch' | 'flowercrown'> = {
-  everyday: 'none', spring: 'flowercrown', christmas: 'santa', halloween: 'witch',
+  everyday: 'none', spring: 'flowercrown', summer: 'none', christmas: 'santa', halloween: 'witch',
 };

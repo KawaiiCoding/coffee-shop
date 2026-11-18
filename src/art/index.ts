@@ -8,7 +8,12 @@ import type { DecorId, MenuItemId, StoryArtId, ThemeId } from '../types';
 import { storyArtA } from './story-a';
 import { storyArtB } from './story-b';
 export { mess, placeGhost } from './mess';
-export { homeSceneDefs, homeBack, homeFront, savingsJar, homeSpotIcon } from './home-room';
+export { homeSceneDefs, homeBack, homeFront, savingsJar, homeSpotIcon, bathDoor, shootingStar, calendarArt, bedBlanket, HOME_WINDOW } from './home-room';
+export { furniture, furnitureFront, furnitureSvg } from './home-furniture';
+export { dish, product, dishSvg, productSvg } from './food';
+export { konbiniDefs, konbiniBack, konbiniCounterFront, konbiniFront, CLERK_LOOK, konbiniExteriorSvg } from './konbini-art';
+import { storyArtC } from './story-c';
+export { stickerSvg, lockedStickerSvg, journalCoverSvg, secretReaction, newspaperOnFloor, gazetteMastheadSvg, weatherSvg } from './stickers';
 export { homeItem, homeItemSvg } from './home-items';
 import { decorA } from './decor-a';
 import { decorB } from './decor-b';
@@ -63,8 +68,9 @@ export function decorSvg(id: DecorId, theme: ThemeId, size: number): string {
 }
 
 const STORY_A: StoryArtId[] = ['ad', 'walk_to_cafe', 'interview', 'hired', 'messy_shop'];
+const STORY_B: StoryArtId[] = ['shop_ready', 'payday', 'home_evening', 'dream_bike', 'dream_mom'];
 /** Story panel illustration (standalone svg, viewBox 0 0 320 240; UI scales it with CSS). */
 export function storyArtSvg(id: StoryArtId): string {
-  const inner = STORY_A.includes(id) ? storyArtA(id) : storyArtB(id);
+  const inner = STORY_A.includes(id) ? storyArtA(id) : STORY_B.includes(id) ? storyArtB(id) : storyArtC(id);
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="${id.replace(/_/g, ' ')}">${inner}</svg>`;
 }

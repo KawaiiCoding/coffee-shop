@@ -4,12 +4,15 @@
    ===================================================================== */
 
 /* ---------- ids ---------- */
-export type ThemeId = 'everyday' | 'spring' | 'christmas' | 'halloween';
+export type ThemeId = 'everyday' | 'spring' | 'summer' | 'christmas' | 'halloween';
 export type Species = 'bear' | 'cat' | 'bunny' | 'fox' | 'sheep' | 'duck' | 'frog' | 'mouse' | 'ghost';
 export type Mood = 'calm' | 'happy' | 'cross' | 'sleepy';
 export type Accessory = 'none' | 'bow' | 'flower' | 'scarf' | 'beret' | 'apron';
 export type HatKind = 'none' | 'santa' | 'witch' | 'flowercrown';
-export type Pose = 'stand' | 'sit' | 'walk';
+/** 'lie' = lying on its back, head to the LEFT, feet at (0,0) is the body's centre on the mattress (used for sleeping). */
+export type Pose = 'stand' | 'sit' | 'walk' | 'lie';
+/** Things a character can hold in its paws. */
+export type HeldProp = 'towel' | 'phone' | 'book' | 'bowl' | 'spatula' | 'basket' | 'gift' | 'chopsticks';
 
 /** Things guests order. Drinks brew at the machine; food is taken from the display instantly. */
 export type MenuItemId =
@@ -44,7 +47,9 @@ export type UpgradeId =
 export type SfxName =
   | 'tap' | 'bell' | 'seat' | 'order' | 'brew' | 'ding' | 'pickup'
   | 'serve' | 'coin' | 'angry' | 'buy' | 'dayEnd' | 'error'
-  | 'page' | 'sweep' | 'pop' | 'place' | 'cook' | 'splash' | 'phone' | 'yawn' | 'jar';
+  | 'page' | 'sweep' | 'pop' | 'place' | 'cook' | 'splash' | 'phone' | 'yawn' | 'jar'
+  | 'chime' | 'register' | 'gift' | 'wish' | 'crackle' | 'eat' | 'door' | 'unlock'
+  | 'irasshaimase' | 'arigato';       // konbini clerk voice lines (spoken with a Japanese system voice when available)
 
 /* ---------- looks ---------- */
 export interface CharacterLook {
@@ -63,6 +68,8 @@ export interface DrawCharacterOpts {
   facing: 1 | -1;          // 1 = facing right, -1 = mirrored
   walkPhase?: number;      // 0..1 for a small bob/step while walking
   carrying?: MenuItemId[]; // waiter's tray (drawn held at side)
+  holding?: HeldProp;      // a prop held in front (home actions, konbini basket, gifts)
+  towel?: boolean;         // wrapped in a fluffy towel with a towel turban (just out of the bath)
 }
 
 /* ---------- catalogue data (owned by engine, displayed by UI) ---------- */
@@ -155,11 +162,15 @@ export interface DayStats {
 }
 
 /* ---------- story ---------- */
-export type StoryId = 'intro' | 'cleanup_done' | 'payday' | 'home_intro' | 'dream';
+/** Story ids: the original five plus any id the story designer adds in src/story.ts STORIES. */
+export type StoryId = 'intro' | 'cleanup_done' | 'payday' | 'home_intro' | 'dream' | (string & {});
 /** One illustration per panel, drawn by art.storyArtSvg (viewBox 0 0 320 240). */
 export type StoryArtId =
   | 'ad' | 'walk_to_cafe' | 'interview' | 'hired' | 'messy_shop'
-  | 'shop_ready' | 'payday' | 'home_evening' | 'dream_bike' | 'dream_mom';
+  | 'shop_ready' | 'payday' | 'home_evening' | 'dream_bike' | 'dream_mom'
+  // v3 illustrations (story-c.ts)
+  | 'phone_gift' | 'regular_gift' | 'konbini_open' | 'shooting_star' | 'cooking_first'
+  | 'fireplace_night' | 'mom_visits_cafe' | 'friends_party' | 'festival_coming' | 'new_dream';
 export interface StoryPanel { art: StoryArtId; text: string; speaker?: string }
 
 /* ---------- getting the café ready (mode 'cleanup') ---------- */
@@ -184,8 +195,12 @@ export interface TutorialState {
 }
 
 /* ---------- the bear at home ---------- */
-export type HomeActionId = 'cook' | 'bath' | 'call_mom' | 'read' | 'save' | 'sleep';
+/** 'cook' opens the recipe picker (cookDish); 'eat' eats the cooked meal at the dining table; 'warm' sits by the fireplace;
+ *  'calendar' opens the calendar (UI only, no bear action). */
+export type HomeActionId = 'cook' | 'eat' | 'bath' | 'call_mom' | 'read' | 'save' | 'sleep' | 'warm' | 'calendar';
 export type HomeSlot = 'wall' | 'window' | 'bed' | 'rug' | 'corner' | 'pet';
+/** Big home furniture that is unlocked over time (gifts, chapters, purchases). The bed, bath door, stove and jar are always there. */
+export type FurnitureId = 'phone' | 'armchair' | 'dining_table' | 'fireplace' | 'bookshelf' | 'radio';
 export type HomeItemId =
   | 'poster_coffee' | 'photo_mom'          // wall
   | 'curtains_lace' | 'curtains_stars'     // window
@@ -211,6 +226,11 @@ export interface HomeProgress {
   owned: HomeItemId[];
   placed: Record<HomeSlot, HomeItemId | null>;
   doneToday: HomeActionId[]; // reset when a work day starts
+  furniture: FurnitureId[];  // unlocked big furniture
+  pantry: Partial<Record<IngredientId | SnackId, number>>; // groceries at home
+  meal: DishId | null;       // cooked dish waiting on the dining table (or stove if no table)
+  books: number;             // books owned (reading needs armchair + a book)
+  fireOn: boolean;           // fireplace lit
 }
 export interface HomeBear {
   x: number; y: number; facing: 1 | -1; walkPhase: number;
@@ -224,7 +244,17 @@ export interface Settings {
 }
 
 export interface Progress {
-  version: 2;                         // v1 saves are migrated (story/cleanup marked done, default home)
+  version: 3;                         // v1/v2 saves are migrated
+  chapter: number;                    // index into CHAPTERS of the current goal (=== length when all done)
+  konbiniOpen: boolean;
+  friendship: Partial<Record<RegularId, number>>;  // points; level = floor(points / 3)
+  giftsReceived: string[];            // `${regularId}:${index}` or `event:${id}:${year}`
+  recipes: DishId[];                  // known recipes
+  stats: Stats;
+  secrets: string[];                  // SecretDef ids discovered (journal pages unlocked), in discovery order
+  secretCounters: Record<string, number>; // small counters secrets use (taps on the clock, nights by the fire...)
+  newsReadDay: number;                // last progress.day whose newspaper was read (0 = never)
+  newsSeen: string[];                 // ids of news pieces already printed (so stories don't repeat), capped ~200
   storySeen: StoryId[];
   cleanupDone: boolean;
   home: HomeProgress;
@@ -243,9 +273,19 @@ export interface GameState {
   /** title → story(intro) → cleanup → story(cleanup_done) → playing ⇄ paused → dayEnd → home → (sleep) playing ...
    *  'story' shows state.story panels over everything (UI). 'cleanup' = getting the café ready (chores).
    *  'home' = the bear's home (state.scene === 'home'). */
-  mode: 'title' | 'story' | 'cleanup' | 'playing' | 'paused' | 'dayEnd' | 'home';
+  mode: 'title' | 'story' | 'cleanup' | 'playing' | 'paused' | 'dayEnd' | 'home' | 'konbini';
   /** Which place the renderer draws. */
-  scene: 'cafe' | 'home';
+  scene: Scene;
+  /** Konbini visit (scene 'konbini'). */
+  konbini: KonbiniState;
+  /** Popup waiting to be shown (gift / unlock / chapter done / wish / festival). UI shows it, dismissPopup() clears it. */
+  popup: Popup | null;
+  /** A shooting star crossing the home window (night only, rare). x,y scene coords, t 0..1 across. */
+  shootingStar: { x: number; y: number; t: number } | null;
+  /** Today's real-world calendar info. */
+  calendar: CalendarInfo;
+  /** A secret hotspot's little reaction animation playing right now (t 0..1). */
+  reaction: { spot: SecretSpotId; t: number } | null;
   /** Story being shown (mode 'story'). panel = index into STORIES[id]. */
   story: { id: StoryId; panel: number } | null;
   /** Café chores during mode 'cleanup' (empty otherwise). */
@@ -277,13 +317,18 @@ export type GameEvent =
   | { type: 'toast'; text: string }
   | { type: 'dayEnd'; stats: DayStats }
   | { type: 'progress' }              // coins/upgrades/decor/settings changed (UI should refresh menus)
-  | { type: 'decor' };                // placed decor or theme changed (renderer should rebuild static layer)
+  | { type: 'decor' }                 // placed decor or theme changed (renderer should rebuild static layer)
+  | { type: 'scene'; scene: Scene }   // the place changed (music switches playlist)
+  | { type: 'popup' }                 // state.popup was set
+  | { type: 'sheet'; sheet: 'cook' | 'calendar' | 'news' | 'journal' }; // a home tap asks the UI to open the recipe picker / calendar / newspaper / journal
 
 export interface GameApi {
   readonly state: GameState;
   readonly catalog: {
     menu: MenuItemDef[]; upgrades: UpgradeDef[]; decor: DecorDef[]; themes: ThemeDef[];
     homeActions: HomeActionDef[]; homeItems: HomeItemDef[];
+    ingredients: IngredientDef[]; snacks: SnackDef[]; dishes: DishDef[]; goods: KonbiniGoodDef[];
+    regulars: RegularDef[]; chapters: ChapterDef[]; seasonEvents: SeasonEventDef[]; secrets: SecretDef[];
   };
   /* story (mode 'story') */
   storyNext(): void;                   // next panel; after the last one the story's follow-up happens
@@ -295,6 +340,25 @@ export interface GameApi {
   placeHomeItem(id: HomeItemId): void;
   homeBonus(): { speed: number; tips: number }; // multipliers applied in the café, for UI display
   canDoHomeAction(id: HomeActionId): { ok: boolean; reason?: string };
+  /* v3 */
+  goTo(scene: 'home' | 'konbini'): void;            // walk between home and the konbini (konbini only when unlocked)
+  cookDish(id: DishId): boolean;                     // after 'cook' was chosen: uses pantry ingredients
+  canCook(id: DishId): { ok: boolean; missing: Partial<Record<IngredientId, number>> };
+  konbiniTake(id: KonbiniStockId): boolean;          // bear walks to the shelf and puts one in the basket
+  konbiniRemove(id: KonbiniStockId): void;           // take one back out of the basket
+  konbiniCheckout(): boolean;                        // pay at the counter from the wallet
+  basketTotal(): number;
+  dismissPopup(): void;
+  currentGoal(): { chapter: number; title: string; goal: string; progress: number } | null;
+  friendLevel(id: RegularId): number;
+  setFire(on: boolean): void;
+  eatSnack(id: SnackId): boolean;                    // eat a konbini snack from the pantry right away
+  /** Mocha's journal: every secret in catalogue order, with found state. */
+  journal(): { def: SecretDef; found: boolean; foundIndex: number }[];
+  /** Today's newspaper (generated once per day, stable within the day). */
+  newspaper(): NewsIssue;
+  /** Mark today's paper as read (small happiness, counts for secrets). */
+  readNewspaper(): void;
   subscribe(fn: (e: GameEvent) => void): () => void;
   update(dt: number): void;            // advance simulation; called every frame by main.ts
   startDay(): void;                    // from title, dayEnd or home. Routes through intro story / cleanup when not done yet.
@@ -316,4 +380,164 @@ export interface AudioApi {
   unlock(): void;                      // call on first user gesture
   playSfx(name: SfxName): void;
   applySettings(s: Settings): void;    // music on/off, volumes
+  setScene(scene: Scene): void;        // switch playlist: 'tracks' (café), 'home', 'konbini' (falls back to café list)
+}
+
+/* =====================================================================
+   v3: CALENDAR & SEASONS, FOOD & KONBINI, FRIENDS & PROGRESSION
+   ===================================================================== */
+export type Scene = 'cafe' | 'home' | 'konbini';
+
+/* ---------- calendar (real-world date drives the season) ---------- */
+export type SeasonEventId = 'new_year' | 'valentine' | 'spring' | 'tanabata' | 'summer' | 'halloween' | 'christmas';
+export interface SeasonEventDef {
+  id: SeasonEventId; name: string;
+  month: number; day: number;          // date of the event (1-12, 1-31)
+  theme?: ThemeId;                     // theme it brings (from `leadDays` before until a few days after)
+  leadDays: number;                    // "coming soon" starts this many days before
+  blurb: string;                       // one short cute line, e.g. "Snowy lattes and twinkly lights!"
+  gift?: Reward;                       // given once on the day (when the player plays on/after it that year)
+}
+export interface CalendarInfo {
+  date: { year: number; month: number; day: number; weekday: number };
+  season: 'winter' | 'spring' | 'summer' | 'autumn';
+  next: { id: SeasonEventId; name: string; daysLeft: number; blurb: string } | null;
+  today: SeasonEventId | null;
+}
+
+/* ---------- food ---------- */
+export type IngredientId = 'rice' | 'egg' | 'milk' | 'flour' | 'honey' | 'curry_roux' | 'noodles' | 'veggies' | 'tofu' | 'strawberry' | 'bread' | 'miso';
+export type SnackId = 'melon_bread' | 'pudding' | 'canned_coffee' | 'dango' | 'onigiri_pack' | 'ice_cream';
+export type DishId = 'honey_toast' | 'onigiri' | 'omurice' | 'curry_rice' | 'ramen' | 'pancakes' | 'miso_soup' | 'strawberry_parfait';
+export interface IngredientDef { id: IngredientId; name: string; price: number }
+export interface SnackDef { id: SnackId; name: string; price: number; energy: number; happiness: number }
+export interface DishDef {
+  id: DishId; name: string;
+  ingredients: Partial<Record<IngredientId, number>>;
+  energy: number; happiness: number;
+  unlock?: { chapter: number };        // recipe appears from this chapter on
+}
+/** Non-food things sold at the konbini. */
+export type KonbiniGoodId = 'book' | 'magazine' | 'flowers' | 'postcard';
+export interface KonbiniGoodDef { id: KonbiniGoodId; name: string; price: number; happiness: number }
+export type KonbiniStockId = IngredientId | SnackId | KonbiniGoodId;
+
+/* ---------- friends (regular café guests) ---------- */
+export type RegularId = 'maple' | 'cotton' | 'fern' | 'pip' | 'crumb' | 'pom' | 'button';
+export type Reward =
+  | { kind: 'pay'; amount: number }
+  | { kind: 'tips'; amount: number }
+  | { kind: 'furniture'; id: FurnitureId }
+  | { kind: 'homeItem'; id: HomeItemId }
+  | { kind: 'decor'; id: DecorId }
+  | { kind: 'book' }
+  | { kind: 'ingredient'; id: IngredientId; amount: number }
+  | { kind: 'recipe'; id: DishId }
+  | { kind: 'happiness'; amount: number };
+export interface RegularDef {
+  id: RegularId; name: string; look: CharacterLook;
+  favourite: MenuItemId;               // serving it gives extra friendship
+  intro: string;                       // short line the first time they come
+  gifts: { at: number; reward: Reward; line: string }[]; // friendship level → gift + a short line
+  firstDay: number;                    // day they start visiting
+}
+
+/* ---------- chapters (the long-term story goals) ---------- */
+export type GoalCheck =
+  | { kind: 'day'; day: number }
+  | { kind: 'served'; count: number }            // total guests served
+  | { kind: 'friend'; id: RegularId; level: number }
+  | { kind: 'cooked'; count: number; dish?: DishId }
+  | { kind: 'konbini'; count: number }           // konbini purchases (checkouts)
+  | { kind: 'calls'; count: number }             // calls to Mom
+  | { kind: 'savings'; amount: number }
+  | { kind: 'dream' }                            // bicycle bought
+  | { kind: 'furniture'; id: FurnitureId }
+  | { kind: 'homeItems'; count: number }
+  | { kind: 'wishes'; count: number };           // shooting stars caught
+export interface ChapterDef {
+  id: number; title: string;
+  goal: string;                        // short, e.g. "Serve 10 guests"
+  check: GoalCheck;
+  story?: StoryId;                     // played when the chapter is completed
+  rewards: Reward[];
+  unlocks?: { konbini?: boolean };     // konbini becomes visitable
+}
+export interface Popup {
+  kind: 'gift' | 'unlock' | 'chapter' | 'wish' | 'festival' | 'secret';
+  title: string; text: string;
+  from?: RegularId | 'button' | 'mom' | 'star';
+  rewards: Reward[];
+}
+export interface Stats { cooked: number; konbini: number; calls: number; wishes: number; served: number; daysPlayed: number }
+
+/* ---------- konbini live state ---------- */
+export interface KonbiniState {
+  basket: { id: KonbiniStockId; qty: number }[];
+  bear: HomeBear;                      // reuses the walking bear struct (action unused)
+}
+
+/* =====================================================================
+   v4: MOCHA'S JOURNAL — hidden discoveries
+   ===================================================================== */
+/** How a secret is found. The secrets engine checks these.
+ *  tap: tapping a hidden hotspot (see SECRET_SPOTS in layout.ts) `times` times (in one visit/scene stay).
+ *  event: a game moment happened `times` times in total (counted in secretCounters), optionally only when `when` matches. */
+export type SecretTrigger =
+  | { kind: 'tap'; spot: SecretSpotId; times: number; when?: SecretWhen }
+  | { kind: 'event'; event: SecretEventId; times: number; when?: SecretWhen };
+export interface SecretWhen {
+  theme?: ThemeId; season?: 'winter' | 'spring' | 'summer' | 'autumn'; festivalToday?: SeasonEventId;
+  fireOn?: boolean; minDay?: number; chapterAtLeast?: number; hourFrom?: number; hourTo?: number; // real-world local hour
+  weekday?: number;                    // 0 Sunday .. 6 Saturday
+}
+export type SecretSpotId =
+  // café
+  | 'cafe_clock' | 'cafe_window' | 'cafe_record' | 'cafe_plant' | 'cafe_barista' | 'cafe_door_bell' | 'cafe_menu_board'
+  // home
+  | 'home_moon' | 'home_kettle' | 'home_duck_sign' | 'home_box' | 'home_pillow' | 'home_jar' | 'home_photo' | 'home_fireplace'
+  // konbini
+  | 'konbini_star_sign' | 'konbini_clerk' | 'konbini_coffee_machine' | 'konbini_umbrella';
+export type SecretEventId =
+  | 'served_perfect' | 'served_regular' | 'served_favourite' | 'lost_guest' | 'day_three_stars' | 'tutorial_done'
+  | 'cooked' | 'cooked_all_recipes' | 'ate_snack' | 'bath' | 'called_mom' | 'read' | 'slept' | 'warmed'
+  | 'read_newspaper' | 'konbini_checkout' | 'bought_sale_item' | 'konbini_big_basket' | 'wish' | 'festival_day' | 'bought_home_item' | 'bought_upgrade'
+  | 'bought_decor' | 'record_toggle' | 'all_regulars_met' | 'saved_coin' | 'rich_wallet' | 'night_owl' | 'early_bird';
+export interface SecretDef {
+  id: string;
+  title: string;                       // journal page title, e.g. "The winking clock"
+  page: string;                        // Mocha's diary entry (2-3 short sentences, first person, cute)
+  hint: string;                        // shown on the locked page, vague and playful ("Clocks have secrets too...")
+  sticker: StickerId;                  // sticker on the page (art.stickerSvg)
+  trigger: SecretTrigger;
+  reward?: Reward;                     // small optional bonus
+}
+export type StickerId =
+  | 'clock_wink' | 'moon_smile' | 'kettle_song' | 'duck_quack' | 'box_cat' | 'pillow_fort' | 'jar_sparkle' | 'mom_photo'
+  | 'fire_heart' | 'star_wish' | 'record_note' | 'plant_sprout' | 'bell_ring' | 'menu_doodle' | 'button_paw'
+  | 'konbini_star' | 'clerk_bow' | 'coffee_cup' | 'umbrella_frog' | 'perfect_day' | 'chef_hat' | 'snack_bag'
+  | 'bubble_bath' | 'phone_heart' | 'book_stack' | 'sleepy_moon' | 'big_basket' | 'festival_lantern' | 'friend_circle'
+  | 'night_owl' | 'early_bird' | 'golden_coin' | 'rainy_window' | 'sunflower' | 'snowflake' | 'pumpkin_grin';
+
+/* =====================================================================
+   v4: THE YARN STREET GAZETTE — a fresh newspaper every morning at home
+   ===================================================================== */
+export type Weather = 'sunny' | 'cloudy' | 'rainy' | 'snowy' | 'windy' | 'starry';
+export interface NewsArticle {
+  id: string;                          // unique per piece (template id + variant), stored in newsSeen
+  section: 'town' | 'cafe' | 'friends' | 'konbini' | 'season' | 'mystery' | 'mom' | 'fun';
+  title: string; text: string;         // short and cute (title ≤ 40 chars, text ≤ 140 chars)
+  sticker?: StickerId;                 // small picture
+  regular?: RegularId;                 // shows that friend's portrait
+}
+export interface NewsIssue {
+  day: number;                         // progress.day it was printed for
+  dateLabel: string;                   // e.g. "Tue, Nov 18"
+  weather: Weather; weatherLine: string;
+  headline: NewsArticle;
+  articles: NewsArticle[];             // 2-3 smaller pieces
+  sale: { item: KonbiniStockId; percent: number; line: string } | null; // today's Hoshi Mart deal (applied at checkout)
+  horoscope: string;                   // "Bears: a warm drink brings luck today."
+  hint: string | null;                 // a cryptic nudge toward an undiscovered journal secret
+  comic: { panels: [string, string, string] };  // tiny 3-panel joke as text captions
 }

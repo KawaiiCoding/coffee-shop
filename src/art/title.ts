@@ -1,6 +1,6 @@
 /* Standalone illustrations: character portrait, title art. */
 import type { CharacterLook, Mood, ThemeId } from '../types';
-import { INK, CREAM, fl, ln, sh, blob } from './kit';
+import { INK, CREAM, fl, ln, sh, blob, box } from './kit';
 import { TH, THEME_HAT } from './theme';
 import { character } from './character';
 import { n, hell, yarn, pumpkin, SPARK } from './core';
@@ -34,9 +34,36 @@ function bigLatte(theme: ThemeId): string {
     + `<circle cx="-12" cy="14" r="2.6" fill="${INK}"/><circle cx="12" cy="14" r="2.6" fill="${INK}"/>`
     + ln('M-4,18 q2,2.6 4,0 q2,2.6 4,0', 1.8)
     + `<ellipse cx="-21" cy="19" rx="5" ry="3" fill="#eda2a2" opacity=".8"/><ellipse cx="21" cy="19" rx="5" ry="3" fill="#eda2a2" opacity=".8"/>`
-    // steam
-    + `<path d="M-14,-28 C-20,-36 -8,-42 -14,-52 M2,-30 C-4,-40 8,-46 2,-58 M18,-28 C12,-36 24,-42 18,-52" fill="none" stroke="#fff" stroke-width="4" opacity=".9"/>`
+    + (theme === 'summer' ? icedTop() : steam());
+}
+
+/** Summer: the giant latte turns iced, with two ice cubes and a striped straw. */
+function icedTop(): string {
+  const cube = (x: number, y: number, rot: number) =>
+    `<g transform="translate(${x},${y}) rotate(${rot})">${sh(box(-6.5, -6, 13, 12, 3.5, 0.5), '#eaf7fb', 1.8)}`
+    + `<path d="M-3.6,-2.6 q1.4,-2 3.6,-2" fill="none" stroke="#fff" stroke-width="1.4"/></g>`;
+  return ln('M8,-14 L24,-62', 7) + ln('M8,-14 L24,-62', 4.4, '#f39aa6')
+    + `<path d="M11.4,-24 l4,-1.4 M14.4,-33 l4,-1.4 M17.4,-42 l4,-1.4 M20.4,-51 l4,-1.4" stroke="#fff" stroke-width="2.4"/>`
+    + cube(-20, -16, -12) + cube(24, -15, 10)
+    + `<circle cx="34" cy="-30" r="2.4" fill="#fff" stroke="${INK}" stroke-opacity=".4" stroke-width="1"/><circle cx="-30" cy="-34" r="1.8" fill="#fff" stroke="${INK}" stroke-opacity=".4" stroke-width="1"/>`;
+}
+
+function steam(): string {
+  return `<path d="M-14,-28 C-20,-36 -8,-42 -14,-52 M2,-30 C-4,-40 8,-46 2,-58 M18,-28 C12,-36 24,-42 18,-52" fill="none" stroke="#fff" stroke-width="4" opacity=".9"/>`
     + `<path d="M-14,-28 C-20,-36 -8,-42 -14,-52 M2,-30 C-4,-40 8,-46 2,-58 M18,-28 C12,-36 24,-42 18,-52" fill="none" stroke="${INK}" stroke-opacity=".18" stroke-width="1.2" transform="translate(1.5,1)"/>`;
+}
+
+/** Straw hat with a watermelon-pink ribbon, resting on the floor. */
+function strawHat(x: number, y: number, k: number): string {
+  return `<g transform="translate(${x},${y}) scale(${k})">`
+    + `<ellipse cx="1" cy="4" rx="24" ry="5" fill="${INK}" opacity=".14"/>`
+    + sh(hell(0, 0, 22, 6.5, 0.03, 21), '#f3d58a', 2)
+    + sh('M-11,-1 C-12,-10 -7,-15 0,-15 C7,-15 12,-10 11,-1 C6,1 -6,1 -11,-1z', '#f6dd98', 2)
+    + fl('M-11.4,-4.6 C-6,-2.6 6,-2.6 11.4,-4.6 L11,-1 C6,1 -6,1 -11,-1z', '#e8697e', 0.95)
+    + `<path d="${hell(0, 0, 16, 4, 0.02, 22)}" fill="none" stroke="${INK}" stroke-opacity=".3" stroke-width="1" stroke-dasharray="2 3"/>`
+    + `<path d="M-7,-11 q7,-2 14,0" fill="none" stroke="${INK}" stroke-opacity=".3" stroke-width="1" stroke-dasharray="2 3"/>`
+    + sh(blob(13, -2, 3.4, 3), '#fbe07a', 1.4) + `<circle cx="13" cy="-2" r="1.1" fill="#9a6a4a"/>`
+    + '</g>';
 }
 
 function titleBunting(theme: ThemeId): string {
@@ -84,6 +111,13 @@ export function titleArtSvg(theme: ThemeId): string {
   if (theme === 'halloween') s += pumpkin(296, 200, 0.7, true) + pumpkin(24, 204, 0.5, false);
   if (theme === 'christmas') {
     s += `<g fill="#fff" opacity=".9">${[[30, 60], [80, 40], [130, 70], [200, 50], [250, 72], [292, 48], [20, 120], [300, 120]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.2"/>`).join('')}</g>`;
+  }
+  if (theme === 'summer') {
+    s += strawHat(28, 206, 0.9)
+      + `<circle cx="290" cy="58" r="15" fill="#fff4b8" opacity=".5"/>` + sh(blob(290, 58, 9, 9), '#ffe066', 1.8)
+      + ln('M290,40 v-4 M290,76 v4 M272,58 h-4 M308,58 h4 M277,45 l-3,-3 M303,45 l3,-3 M277,71 l-3,3 M303,71 l3,3', 1.6, '#f2c14e')
+      + [[48, 74], [110, 60], [236, 58], [36, 132]]
+        .map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${2 + (i % 2)}" fill="#ffffff" fill-opacity=".25" stroke="#ffffff" stroke-width="1.2"/>`).join('');
   }
   if (theme === 'spring') {
     s += [[40, 70, '#f6b6c8'], [100, 54, '#fbd8e2'], [222, 60, '#f6b6c8'], [286, 84, '#fbd8e2'], [30, 140, '#f6b6c8']]

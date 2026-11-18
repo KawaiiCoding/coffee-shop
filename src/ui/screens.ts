@@ -1,15 +1,22 @@
+import { DREAMS, dreamStage } from '../engine/home';
 /* HTML builders for the story book, cleanup checklist, tutorial card and the
    bear's home (dock, dream card, "make it cozy" sheet).
    All interactivity goes through data-act attributes handled in index.ts. */
 import { homeItemSvg, storyArtSvg } from '../art';
 import { STORIES, TUTORIAL_STEPS } from '../story';
-import type { Chore, GameApi, HomeActionDef, HomeActionId, HomeProgress, HomeSlot, StoryId } from '../types';
-import { art, esc, icon, type UiIcon } from './util';
+import type { Chore, FurnitureId, GameApi, HomeActionDef, HomeActionId, HomeProgress, HomeSlot, StoryId } from '../types';
+import { art, esc, firstIcon, icon, type UiIcon } from './util';
 
 const safe = <T>(f: () => T, d: T): T => { try { return f(); } catch { return d; } };
 
-export const purse = (n: number, sign = '') =>
-  `<span class="cost cost-purse">${icon('purse')}<b>${sign}${esc(n)}</b></span>`;
+/** Mocha's own money ("Pay"): rose pill with the 'pay' icon. Café coins are gold (see sheets.ts coins()). */
+export const pay = (n: number, sign = '') =>
+  `<span class="cost cost-pay" aria-label="${esc(`${sign}${n} pay`)}">${icon('pay')}<b>${sign}${esc(n)}</b></span>`;
+/** @deprecated use pay() */
+export const purse = pay;
+/** Café coins: gold pill with the 'coin' icon. */
+export const coins = (n: number, sign = '') =>
+  `<span class="cost cost-coin" aria-label="${esc(`${sign}${n} café coins`)}">${icon('coin')}<b>${sign}${esc(n)}</b></span>`;
 
 /* ------------------------------ story ------------------------------ */
 export function storyHtml(id: StoryId, panel: number): string {
@@ -68,36 +75,107 @@ export const TUTORIAL_COUNT = TUTORIAL_STEPS.length;
 
 /* -------------------------------- home -------------------------------- */
 export const ACTION_ICON: Record<HomeActionId, UiIcon> = {
-  cook: 'pot', bath: 'bath', call_mom: 'phone', read: 'book', save: 'jar', sleep: 'moon',
+  cook: 'pot', eat: 'bowl', bath: 'bath', call_mom: 'phone', read: 'book', save: 'jar', sleep: 'moon',
+  warm: 'fire', calendar: 'calendar',
 };
 const ACTION_SHORT: Record<HomeActionId, string> = {
-  cook: 'Cook', bath: 'Bath', call_mom: 'Call Mom', read: 'Read', save: 'Save', sleep: 'Sleep',
+  cook: 'Cook', eat: 'Eat', bath: 'Bath', call_mom: 'Call Mom', read: 'Read', save: 'Save', sleep: 'Sleep',
+  warm: 'Warm up', calendar: 'Calendar',
 };
+/** Dock order (most used first). Locked ones move to the end; extras overflow into "more". */
+const DOCK_ORDER: (HomeActionId | 'konbini')[] = ['cook', 'eat', 'bath', 'save', 'konbini', 'read', 'call_mom', 'warm'];
+/** Round buttons in the dock row besides "more" and Sleep. */
+const DOCK_MAIN = 5;
 
-function actionBtn(game: GameApi, a: HomeActionDef, busy: HomeActionId | null): string {
-  const can = safe(() => game.canDoHomeAction(a.id), { ok: false, reason: 'Not right now' });
+export interface HomeUi { more: boolean; chip: boolean }
+
+/** Why an action can't be done yet because something is missing at home.
+ *  null = available, 'hide' = don't show the button at all. */
+export function homeLock(game: GameApi, id: HomeActionId): string | null | 'hide' {
+  const h = game.state.progress.home;
+  const has = (f: FurnitureId) => (h?.furniture ?? []).includes(f);
+  switch (id) {
+    case 'call_mom': return has('phone') ? null : 'Mocha needs a phone to call Mom';
+    case 'read':
+      if (!has('armchair')) return 'Mocha needs a comfy armchair to read in';
+      if ((h?.books ?? 0) <= 0) return game.state.progress.konbiniOpen ? 'No books yet. Buy one at Hoshi Mart' : 'Mocha has no books yet';
+      return null;
+    case 'warm': return has('fireplace') ? null : 'hide';
+    case 'eat':
+      if (!has('dining_table') && !h?.meal) return 'hide';
+      return h?.meal ? null : 'Cook a meal first';
+    default: return null;
+  }
+}
+
+interface DockBtn { key: string; html: string; locked: boolean }
+
+function actionBtn(game: GameApi, a: HomeActionDef, busy: HomeActionId | null, lock: string | null): DockBtn {
+  const can = lock ? { ok: false, reason: lock } : safe(() => game.canDoHomeAction(a.id), { ok: false, reason: 'Not right now' });
   const short = ACTION_SHORT[a.id] ?? a.name;
   const doneToday = game.state.progress.home?.doneToday?.includes(a.id) ?? false;
   const why = can.ok ? a.description : (can.reason ?? 'Not right now');
-  const label = `${a.name}${a.cost > 0 ? `, costs ${a.cost}` : ''}. ${why}`;
-  return `
-    <button class="act ${can.ok ? '' : 'off'} ${busy === a.id ? 'doing' : ''} ${doneToday ? 'done' : ''}"
+  const label = `${a.name}${a.cost > 0 ? `, costs ${a.cost} pay` : ''}. ${lock ? `Locked: ${lock}` : why}`;
+  const html = `
+    <button class="act ${can.ok ? '' : 'off'} ${lock ? 'locked' : ''} ${busy === a.id ? 'doing' : ''} ${doneToday ? 'done' : ''}"
       data-act="home-act" data-id="${esc(a.id)}" data-focus="act-${esc(a.id)}"
       aria-disabled="${!can.ok}" title="${esc(why)}" aria-label="${esc(label)}">
-      <span class="act-ring">${icon(ACTION_ICON[a.id] ?? 'star')}${doneToday ? `<span class="act-done">${icon('check')}</span>` : ''}</span>
+      <span class="act-ring">${icon(ACTION_ICON[a.id] ?? 'star')}
+        ${doneToday ? `<span class="act-done">${icon('check')}</span>` : ''}
+        ${lock ? `<span class="act-lock">${icon('lock')}</span>` : ''}
+        ${a.cost > 0 && !lock ? `<span class="act-cost">${esc(a.cost)}</span>` : ''}
+      </span>
       <span class="act-name">${esc(short)}</span>
-      ${a.cost > 0 ? `<span class="act-cost">${icon('purse')}${esc(a.cost)}</span>` : ''}
+    </button>`;
+  return { key: a.id, html, locked: !!lock };
+}
+
+function konbiniBtn(): DockBtn {
+  return {
+    key: 'konbini', locked: false,
+    html: `
+    <button class="act act-konbini" data-act="go-konbini" data-focus="act-konbini" aria-label="Walk to Hoshi Mart, the corner shop">
+      <span class="act-ring">${icon('konbini')}</span><span class="act-name">Shop</span>
+    </button>`,
+  };
+}
+
+function simpleBtn(act: string, key: string, ic: UiIcon, name: string, label: string, extra = ''): string {
+  return `
+    <button class="act act-${key}" data-act="${act}" ${extra} data-focus="act-${key}" aria-label="${esc(label)}">
+      <span class="act-ring">${icon(ic)}</span><span class="act-name">${esc(name)}</span>
     </button>`;
 }
 
-/** Bottom dock: every home action except sleep, plus the "Make it cozy" button. */
-export function homeDockHtml(game: GameApi): string {
-  const busy = game.state.homeBear?.action ?? null;
-  const acts = game.catalog.homeActions.filter((a) => a.id !== 'sleep').map((a) => actionBtn(game, a, busy)).join('');
-  return `${acts}
-    <button class="act act-cozy" data-act="open" data-sheet="home" data-focus="act-cozy" aria-label="Make it cozy: decorate your home">
-      <span class="act-ring">${icon('decor')}</span><span class="act-name">Cozy</span>
+/** The home dock: one slim row of round buttons, "more" for rarely used ones, and Sleep at the end. */
+export function homeDockHtml(game: GameApi, ui: HomeUi): { row: string; more: string } {
+  const s = game.state;
+  const busy = s.homeBear?.action ?? null;
+  const defs = new Map(game.catalog.homeActions.map((a) => [a.id, a] as const));
+  const btns: DockBtn[] = [];
+  for (const id of DOCK_ORDER) {
+    if (id === 'konbini') { if (s.progress.konbiniOpen) btns.push(konbiniBtn()); continue; }
+    const def = defs.get(id);
+    if (!def) continue;
+    const lock = homeLock(game, id);
+    if (lock === 'hide') continue;
+    btns.push(actionBtn(game, def, busy, lock));
+  }
+  // Available first (stable), locked ones last.
+  const sorted = [...btns.filter((b) => !b.locked), ...btns.filter((b) => b.locked)];
+  const main = sorted.slice(0, DOCK_MAIN);
+  const over = sorted.slice(DOCK_MAIN);
+  const moreItems = over.map((b) => b.html).join('')
+    + simpleBtn('open', 'cozy', 'decor', 'Cozy shop', 'Make it cozy: buy things for your home', 'data-sheet="home"')
+    + simpleBtn('calendar', 'calendar', 'calendar', 'Calendar', 'Open the calendar')
+    + simpleBtn('journal', 'journal', firstIcon(['journal', 'book']), 'Journal', 'Open Mocha’s journal')
+    + simpleBtn('news', 'news', firstIcon(['newspaper', 'news', 'sun']), 'Paper', 'Read today’s newspaper');
+  const moreBtn = `
+    <button class="act act-more ${ui.more ? 'on' : ''}" data-act="home-more" data-focus="act-more"
+      aria-expanded="${ui.more}" aria-label="More things to do">
+      <span class="act-ring">${ui.more ? icon('close') : icon('more')}</span><span class="act-name">More</span>
     </button>`;
+  return { row: main.map((b) => b.html).join('') + moreBtn + sleepHtml(game), more: moreItems };
 }
 
 export function sleepHtml(game: GameApi): string {
@@ -106,25 +184,75 @@ export function sleepHtml(game: GameApi): string {
   const can = safe(() => game.canDoHomeAction('sleep'), { ok: true } as { ok: boolean; reason?: string });
   const why = can.ok ? def.description : (can.reason ?? 'Not right now');
   return `
-    <button class="sleep-btn ${can.ok ? '' : 'off'} ${game.state.homeBear?.action === 'sleep' ? 'doing' : ''}"
+    <button class="act act-sleep ${can.ok ? '' : 'off'} ${game.state.homeBear?.action === 'sleep' ? 'doing' : ''}"
       data-act="home-act" data-id="sleep" data-focus="act-sleep" aria-disabled="${!can.ok}" title="${esc(why)}"
       aria-label="${esc(`Sleep, then start the next day. ${can.ok ? '' : why}`)}">
-      ${icon('moon')}<span class="sleep-t"><b>Sleep</b><small>→ next day</small></span>
+      <span class="act-ring">${icon('moon')}</span><span class="act-name">Sleep</span>
     </button>`;
 }
 
+/* ------------------------------ goal chip ------------------------------ */
+type Goal = { chapter: number; title: string; goal: string; progress: number } | null;
+export const currentGoal = (game: GameApi): Goal => safe(() => game.currentGoal(), null);
+const pct = (k: number) => Math.max(0, Math.min(1, Number.isFinite(k) ? k : 0));
+
+/** "Chapter 3 · Cook 3 meals" + mini progress bar. Used at home and on the day-complete card. */
+export function goalChipHtml(g: Goal, cls = ''): string {
+  if (!g) return '';
+  const k = pct(g.progress);
+  const a11y = `Chapter ${g.chapter + 1}, ${g.title}: ${g.goal}. ${Math.round(k * 100)} percent done`;
+  return `
+    <span class="goal-chip ${cls}" ${cls.includes('in-chip') ? '' : `role="img" aria-label="${esc(a11y)}"`}>
+      ${icon('goal')}
+      <span class="goal-t"><b>Chapter ${esc(g.chapter + 1)}</b> · ${esc(g.goal)}</span>
+      <span class="mini-bar" aria-hidden="true"><i style="transform:scaleX(${k.toFixed(3)})"></i></span>
+    </span>`;
+}
+
+/** Slim chip under the home top bar (goal + savings); tap to see the dream card and tomorrow's bonus. */
+export function homeChipHtml(game: GameApi, open: boolean): string {
+  const h = game.state.progress.home;
+  const g = currentGoal(game);
+  const dream = h ? DREAMS[dreamStage(h)] : DREAMS[0];
+  const savings = `<span class="chip-save">${icon(dream ? dream.icon : 'heart')}${dream ? `<b>${esc(h?.savings ?? 0)}</b><small>/${esc(dream.goal)}</small>` : ''}</span>`;
+  const head = `
+    <button class="home-chip ${open ? 'open' : ''}" data-act="home-chip" data-focus="home-chip" aria-expanded="${open}"
+      aria-label="${esc(`${g ? `Chapter ${g.chapter + 1}: ${g.goal}. ` : ''}${open ? 'Hide details' : 'Show goal and dream'}`)}">
+      ${g ? goalChipHtml(g, 'in-chip') : `<span class="goal-chip in-chip">${icon('bike')}<span class="goal-t"><b>Dream</b> · a bicycle to visit Mom</span></span>`}
+      ${g ? savings : ''}
+      <span class="chip-caret" aria-hidden="true"></span>
+    </button>`;
+  if (!open) return head;
+  const goalRow = g ? `
+    <div class="goal-big">
+      ${icon('goal')}
+      <div class="goal-body">
+        <span class="goal-kicker">Chapter ${esc(g.chapter + 1)} · ${esc(g.title)}</span>
+        <b>${esc(g.goal)}</b>
+        <span class="dream-bar"><i style="transform:scaleX(${pct(g.progress).toFixed(3)})"></i></span>
+      </div>
+    </div>` : '';
+  return `${head}
+    <div class="chip-panel">
+      ${goalRow}
+      ${h ? dreamHtml(h) : ''}
+      <p class="chip-bonus">${esc(bonusText(game))}</p>
+    </div>`;
+}
+
 export function dreamHtml(h: HomeProgress): string {
-  const goal = Math.max(1, h.dreamGoal || 1);
-  const k = Math.max(0, Math.min(1, (h.savings ?? 0) / goal));
-  if (h.dreamDone) {
-    return `<div class="dream done">${icon('bike')}<div class="dream-body"><b>Dream come true!</b>
-      <span>Mocha rode his bicycle to Mom</span></div>${icon('heart')}</div>`;
+  const dream = DREAMS[dreamStage(h)];
+  if (!dream) {
+    return `<div class="dream done">${icon('fire')}<div class="dream-body"><b>Dreams come true!</b>
+      <span>A bicycle for Mom's hills and a fire for snowy nights</span></div>${icon('heart')}</div>`;
   }
+  const goal = dream.goal;
+  const k = Math.max(0, Math.min(1, (h.savings ?? 0) / goal));
   return `
     <div class="dream">
-      ${icon('bike')}
+      ${icon(dream.icon)}
       <div class="dream-body">
-        <span class="dream-t"><b>Dream:</b> a bicycle to visit Mom</span>
+        <span class="dream-t"><b>${h.dreamDone ? 'New dream' : 'Dream'}:</b> ${esc(dream.name.charAt(0).toLowerCase() + dream.name.slice(1))}</span>
         <span class="dream-bar" role="progressbar" aria-label="Savings" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${esc(h.savings ?? 0)}">
           <i style="transform:scaleX(${k.toFixed(3)})"></i>
         </span>
@@ -165,8 +293,8 @@ export function homeItemsHtml(game: GameApi): string {
       const status = placed
         ? `<span class="tag tag-placed">${icon('check')}Placed</span>`
         : owned ? '<span class="tag tag-owned">Owned</span>'
-          : `<span class="tag ${afford ? '' : 'tag-poor'}">${purse(it.cost)}</span>`;
-      const label = placed ? `${it.name}, placed` : owned ? `Place ${it.name}` : `Buy ${it.name} for ${it.cost}`;
+          : `<span class="tag ${afford ? '' : 'tag-poor'}">${pay(it.cost)}</span>`;
+      const label = placed ? `${it.name}, placed` : owned ? `Place ${it.name}` : `Buy ${it.name} for ${it.cost} pay`;
       return `
         <li>
           <button class="dec-card ${placed ? 'placed' : ''} ${owned ? 'owned' : ''} ${!owned && !afford ? 'poor' : ''}"
@@ -185,6 +313,6 @@ export function homeItemsHtml(game: GameApi): string {
       <div class="charm-total">${icon('smile')}<b>${esc(Math.round(h?.happiness ?? 0))}</b><span>happy</span></div>
       <p>Cozy things make Mocha happier, and happy bears earn bigger tips</p>
     </div>
-    <div class="sheet-wallet">You have ${purse(wallet)}</div>
+    <div class="sheet-wallet">Your pay: ${pay(wallet)}</div>
     ${groups || '<p class="empty">Nothing to buy yet.</p>'}`;
 }

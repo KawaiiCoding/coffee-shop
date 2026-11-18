@@ -74,6 +74,9 @@ function accent(theme: ThemeId, x: number, y: number): string {
   if (theme === 'halloween')
     return sh(blob(x, y, 4.4, 3.5, 0.2), '#f2a65a', 1.5) + ln(`M${x},${y - 3.4} q1,-1.6 2.4,-2`, 1.4, '#7a9a5a');
   if (theme === 'spring') return sh(blob(x, y, 3, 3), BLUSH, 1.3) + dot(x, y, 1.1, MUSTARD);
+  if (theme === 'summer')
+    return sh(`M${x - 5},${y - 1} C${x - 4},${y + 4} ${x + 4},${y + 4} ${x + 5},${y - 1}z`, '#f08a8a', 1.3)
+      + ln(`M${x - 4.6},${y - 0.4} C${x - 3},${y + 2.2} ${x + 3},${y + 2.2} ${x + 4.6},${y - 0.4}`, 1.2, '#7cc08f');
   return '';
 }
 
@@ -149,7 +152,7 @@ function valance(fill: string): string {
 }
 
 function curtainsLace(theme: ThemeId): string {
-  const rib = theme === 'christmas' ? BERRY : theme === 'halloween' ? '#f2a65a' : BLUSH;
+  const rib = theme === 'christmas' ? BERRY : theme === 'halloween' ? '#f2a65a' : theme === 'summer' ? '#7cc4dc' : BLUSH;
   const LACE = '#fffdf8';
   const side = sh(CURTAIN, LACE, 2.2) + ln(FOLDS, 1.1, '#cdb8a8')
     + fl(circles([[-66, -40], [-56, -30], [-64, -18], [-57, -6], [-66, 26], [-58, 36], [-64, 46], [-54, 48]], 1.3), '#e6d6c8')
@@ -203,7 +206,7 @@ function quiltHearts(theme: ThemeId): string {
 }
 
 function quiltStars(theme: ThemeId): string {
-  const star = theme === 'halloween' ? '#f2a65a' : MUSTARD;
+  const star = theme === 'halloween' ? '#f2a65a' : theme === 'summer' ? '#ffe28a' : MUSTARD;
   let s = fl(QUILT, '#a9c4ea');
   s += fl('M-45,-28 C-20,-31 20,-26 68,-30 L69,-22 C30,-18 -10,-24 -46,-20z', '#c3d5f0');
   s += fl('M-46,-15 C-10,-18 30,-12 69,-16 L69,-11 C40,-8 0,-12 -46,-9z', '#c3d5f0', 0.8);
@@ -220,7 +223,7 @@ function quiltStars(theme: ThemeId): string {
 /* -------------------------------- rug --------------------------------- */
 
 function rugRound(theme: ThemeId): string {
-  const centre = theme === 'christmas' ? BERRY : theme === 'halloween' ? '#f2a65a' : theme === 'spring' ? '#c7e6c0' : SKY;
+  const centre = theme === 'christmas' ? BERRY : theme === 'halloween' ? '#f2a65a' : theme === 'spring' ? '#c7e6c0' : theme === 'summer' ? '#bfe3ef' : SKY;
   let s = shadow(0, 3, 72, 6, 0.1);
   s += sh(scallop(68, 24, 24, 0.09), BLUSH);
   s += fl(circles([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => {
@@ -364,11 +367,14 @@ const VIEWBOX: Record<HomeSlot, string> = {
 /** Drawn relative to its HOME_ANCHOR slot (same conventions as café decor). */
 export function homeItem(id: HomeItemId, theme: ThemeId): string {
   const draw = DRAW[id];
-  return draw ? draw(theme) : '';
+  if (!draw) return '';
+  // quilts lie ON the mattress (top surface x -62..74, y -64..-20 from the bed anchor), right of the pillow
+  if (SLOT[id] === 'bed') return `<g transform="translate(22,-22) scale(.78,1)">${draw(theme)}</g>`;
+  return draw(theme);
 }
 
 /** Standalone <svg> card picture for the home shop. */
 export function homeItemSvg(id: HomeItemId, size: number): string {
   const slot = SLOT[id] ?? 'wall';
-  return standalone(VIEWBOX[slot], size, homeItem(id, 'everyday'), id.replace(/_/g, ' '));
+  return standalone(VIEWBOX[slot], size, DRAW[id]?.('everyday') ?? '', id.replace(/_/g, ' '));
 }

@@ -1,7 +1,8 @@
 /* Core simulation: story flow, cleanup, guests, waiter, counter, day cycle, shop, home bridge, persistence. */
 import type {
-  Chore, ChoreKind, DayStats, DecorId, Effect, GameApi, GameEvent, GameState, Guest, HomeActionId, HomeItemId,
-  MenuItemId, Settings, SfxName, StoryId, TableState, ThemeId, TutorialStepId, UpgradeId, Waiter, WaiterTask,
+  Chore, ChoreKind, DayStats, DecorId, DishId, Effect, GameApi, GameEvent, GameState, Guest, HomeActionId, HomeItemId,
+  KonbiniStockId, MenuItemId, RegularId, Scene, SecretEventId, Settings, SfxName, SnackId, StoryId, TableState, ThemeId,
+  TutorialStepId, UpgradeId, Waiter, WaiterTask,
 } from '../types';
 import {
   AISLE_X, COUNTER, DECOR_ANCHOR, DOOR, DOOR_QUEUE, DOOR_SPOT, ENTRANCE, MACHINE, MESS_SPOTS, SEAT_OFFSET, TABLES,
@@ -9,12 +10,24 @@ import {
 } from '../layout';
 import { STORIES, TUTORIAL_STEPS } from '../story';
 import {
-  DECOR, MENU, THEMES, UPGRADES, computeStars, decorDef, isFood, menuDef, pickOrder, resolveTheme, upgradeDef,
+  DECOR, MENU, THEMES, UPGRADES, availableMenu, computeStars, decorDef, isFood, menuDef, pickOrder, resolveTheme,
+  upgradeDef,
 } from './catalog';
 import { clearProgress, defaultProgress, loadProgress, saveProgress } from './save';
-import { randomLook } from './looks';
+import { randomLook, regularLook } from './looks';
 import * as home from './home';
 import type { HomeCtx } from './home';
+import * as konbini from './konbini';
+import type { KonbiniCtx } from './konbini';
+import * as prog from './progression';
+import type { ProgCtx, ProgEvent } from './progression';
+import { calendarInfo } from './calendar';
+import * as secrets from './secrets';
+import { getIssue, markIssueRead } from './news';
+import { SECRETS } from '../content/secrets';
+import {
+  CHAPTERS, DISHES, GOODS, INGREDIENTS, REGULARS, SEASON_EVENTS, SNACKS,
+} from '../content/progression';
 
 type Pt = { x: number; y: number };
 
@@ -24,6 +37,8 @@ export interface GuestInt extends Guest {
   facing: 1 | -1;
   walkPhase: number;
   tip: number;
+  /** Regular café friend this guest is (null = a random passer-by). */
+  regular: RegularId | null;
 }
 
 export interface GameOptions {
@@ -129,7 +144,9 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
   const rng = opts.rng ?? Math.random;
   const now = opts.now ?? (() => new Date());
   const listeners = new Set<(e: GameEvent) => void>();
+  let quiet = false; // swallow events while silently draining old state (resetSave)
   const emit = (e: GameEvent) => {
+    if (quiet) return;
     for (const fn of [...listeners]) { try { fn(e); } catch (err) { console.error(err); } }
   };
   const sfx = (name: SfxName) => emit({ type: 'sfx', name });
@@ -159,6 +176,11 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
   const state: GameState = {
     mode: 'title',
     scene: 'cafe',
+    konbini: { basket: [], bear: home.newHomeBear() },
+    popup: null,
+    shootingStar: null,
+    reaction: null,
+    calendar: calendarInfo(now()),
     story: null,
     chores: [],
     tutorial: newTutorial(),
@@ -208,15 +230,47 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     state.effects.push(e);
   };
 
-  /* ---------- home bridge ---------- */
-  const ctx: HomeCtx = {
+  /* ---------- progression / home / konbini bridges ---------- */
+  const pctx: ProgCtx = {
     get state() { return state; },
     get progress() { return progress; },
     emit,
     save,
-    onSleep: () => startWorkDay(),
-    playStory: (id: StoryId) => playStory(id),
+    playStory: (id: StoryId) => requestStory(id),
   };
+  const progEvent = (ev: ProgEvent) => {
+    try { prog.progressEvent(pctx, ev); } catch (err) { console.error(err); }
+  };
+
+  const ctx: HomeCtx & { prog: ProgCtx } = {
+    get state() { return state; },
+    get progress() { return progress; },
+    prog: pctx,
+    emit,
+    save,
+    onSleep: () => startWorkDay(),
+    playStory: (id: StoryId) => requestStory(id),
+    openSheet: (sheet: 'cook' | 'calendar' | 'news' | 'journal') => emit({ type: 'sheet', sheet }),
+  };
+  const secretEv = (ev: SecretEventId) => secrets.secretEvent(ctx, ev);
+
+  const kctx: KonbiniCtx = {
+    get state() { return state; },
+    get progress() { return progress; },
+    emit,
+    save,
+    onCheckout: () => { save(); emit({ type: 'progress' }); }, // konbini.ts sends the 'konbini' progress event itself
+    onLeave: () => goTo('home'),
+    playStory: (id: StoryId) => requestStory(id),
+    secretEvent: (ev: SecretEventId) => secretEv(ev),
+    secretTap: (x: number, y: number) => secrets.secretTap(ctx, 'konbini', x, y),
+  };
+
+  function setScene(scene: Scene) {
+    state.scene = scene;
+    emit({ type: 'scene', scene });
+    emit({ type: 'decor' });
+  }
 
   /* ---------- tutorial ---------- */
   function completeStep(id: TutorialStepId, at?: Pt) {
@@ -234,7 +288,8 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
       tut.active = false;
       progress.tutorialDone = true;
       save();
-      toast("You've got it! More guests are coming.");
+      secretEv('tutorial_done');
+      // (the UI's tutorial ticks show a "You've got it!" moment; no toast)
       spawnTimer = spawnGap();
       emit({ type: 'progress' });
     }
@@ -285,14 +340,42 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
   function spawnGuest() {
     const slot = Math.min(doorQueue.length, DOOR_QUEUE_MAX - 1);
     const from = { x: ENTRANCE.x, y: ENTRANCE.y };
+    const reg = state.tutorial.active ? null : pickRegularGuest();
+    const def = reg ? REGULARS.find((r) => r.id === reg) : undefined;
     const g: GuestInt = {
-      id: nextGuestId++, look: randomLook(rng, state.theme), phase: 'entering', table: null,
+      id: nextGuestId++, look: def ? regularLook(def.look, state.theme) : randomLook(rng, state.theme),
+      phase: 'entering', table: null,
       x: from.x, y: from.y, patience: 1, order: null, timer: 0, mood: 'calm', happy: false,
-      path: route(from, DOOR_QUEUE[slot]), facing: 1, walkPhase: 0, tip: 0,
+      path: route(from, DOOR_QUEUE[slot]), facing: 1, walkPhase: 0, tip: 0, regular: def ? def.id : null,
     };
     state.guests.push(g);
     doorQueue.push(g.id);
     sfx('bell');
+    if (def && progress.friendship[def.id] === undefined) {
+      // first visit ever: mark them as met (no toast: it covered the café; their hello lives in the newspaper)
+      progress.friendship[def.id] = 0;
+      save();
+      if (REGULARS.filter((r) => r.id !== 'button').every((r) => progress.friendship[r.id] !== undefined)) secretEv('all_regulars_met');
+    }
+  }
+
+  /** A regular friend for the next guest (never one already in the café). */
+  function pickRegularGuest(): RegularId | null {
+    let id: RegularId | null = null;
+    try { id = prog.pickRegular(progress, progress.day, rng); } catch (err) { console.error(err); }
+    if (!id || !REGULARS.some((r) => r.id === id)) return null;
+    if (guests().some((g) => g.regular === id)) return null;
+    return id;
+  }
+
+  function orderFor(g: GuestInt): MenuItemId {
+    if (state.tutorial.active) return 'latte';
+    const def = g.regular ? REGULARS.find((r) => r.id === g.regular) : undefined;
+    if (def && rng() < 0.6) {
+      const menu = availableMenu(state.theme, level);
+      if (menu.includes(def.favourite)) return def.favourite;
+    }
+    return pickOrder(rng, state.theme, level);
   }
 
   function leavePath(g: GuestInt): Pt[] {
@@ -304,6 +387,7 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     g.phase = 'leaving'; g.timer = 0; g.happy = false; g.mood = 'cross';
     state.dayStats.lost++;
     sfx('angry');
+    secretEv('lost_guest');
     addEffect('angry', g.x, g.y - (g.table != null ? 60 : 84));
     if (state.selectedGuest === g.id) state.selectedGuest = null;
     leaveQueue(g);
@@ -327,6 +411,11 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     g.path = leavePath(g);
     g.table = null;
     if (level('tipjar') > 0) collectCoins(t.index);
+    const def = g.regular ? REGULARS.find((r) => r.id === g.regular) : undefined;
+    progEvent({ kind: 'served', regular: g.regular, favourite: !!def && g.order === def.favourite, happy: true });
+    if (g.patience > 0.8) secretEv('served_perfect');
+    if (g.regular) secretEv('served_regular');
+    if (def && g.order === def.favourite) secretEv('served_favourite');
   }
 
   function collectCoins(i: number) {
@@ -370,7 +459,7 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
         case 'toTable':
           if (!g.path.length) {
             g.phase = 'reading'; g.timer = 0; g.facing = TABLES[g.table!].x < AISLE_X ? 1 : -1;
-            g.order = state.tutorial.active ? 'latte' : pickOrder(rng, state.theme, level);
+            g.order = orderFor(g);
           }
           break;
         case 'reading':
@@ -540,7 +629,7 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     state.theme = resolveTheme(progress.theme, now());
     resetDay();
     state.doorOpen = false;
-    state.scene = 'cafe';
+    setScene('cafe');
     state.mode = 'cleanup';
     state.story = null;
     state.chores = buildChores();
@@ -569,8 +658,9 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
       if (messLeft()) {
         const placeHit = state.chores.some((c) => !c.done && !isMessChore(c)
           && Math.hypot(x - choreTapPoint(c).x, y - choreTapPoint(c).y) <= 50);
-        if (placeHit) { toast('Clean up the mess first'); sfx('error'); }
+        if (placeHit) { toast('Clean up the mess first'); sfx('error'); return; }
       }
+      secrets.secretTap(ctx, 'cafe', x, y);
       return;
     }
     const c = best;
@@ -642,15 +732,40 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     sfx('error');
   }
 
+  /** Speech bubble anchor (bottom tip) of a guest, as drawn by render.ts; null when no bubble shows. */
+  function bubbleAnchor(g: GuestInt): Pt | null {
+    if (g.phase === 'door' || (g.phase === 'entering' && doorQueue.includes(g.id))) return { x: g.x, y: g.y - 84 };
+    if ((g.phase === 'reading' || g.phase === 'ordering' || g.phase === 'waiting') && g.table != null) {
+      const sp = seatPoint(g.table);
+      return { x: sp.x, y: sp.y - 60 };
+    }
+    return null;
+  }
+  const BUBBLE_HALF_W = 30, BUBBLE_H = 60;
+  const inBubble = (p: Pt, x: number, y: number) =>
+    Math.abs(x - p.x) <= BUBBLE_HALF_W && y >= p.y - BUBBLE_H && y <= p.y + 8;
+
   function tapScene(x: number, y: number) {
-    if (state.mode === 'home') { home.homeTap(ctx, x, y); return; }
+    if (state.mode === 'home') { home.homeTap(ctx, x, y); return; } // shooting-star taps are checked first inside homeTap
+    if (state.mode === 'konbini') { konbini.konbiniTap(kctx, x, y); return; }
     if (state.mode === 'cleanup') { tapChore(x, y); return; }
     if (state.mode !== 'playing') return;
+    // speech bubbles are drawn on top: a tap on one counts as tapping that guest
+    for (const g of guests()) {
+      const b = bubbleAnchor(g);
+      if (!b || !inBubble(b, x, y)) continue;
+      if (g.table != null && g.phase !== 'leaving') { tapTable(g.table); return; }
+      if (doorQueue.includes(g.id)) {
+        state.selectedGuest = state.selectedGuest === g.id ? null : g.id;
+        sfx('tap');
+        return;
+      }
+    }
     // any guest waiting in the door queue can be picked
     let pick: GuestInt | null = null, pd = Infinity;
     for (const g of queued()) {
       const dx = Math.abs(x - g.x);
-      if (dx < 26 && y > g.y - 88 && y < g.y + 10 && dx < pd) { pd = dx; pick = g; }
+      if (dx < 28 && y > g.y - 92 && y < g.y + 12 && dx < pd) { pd = dx; pick = g; }
     }
     if (pick) {
       state.selectedGuest = state.selectedGuest === pick.id ? null : pick.id;
@@ -659,20 +774,27 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     }
     if (x >= DOOR.x && x <= DOOR.x + DOOR.w && y >= DOOR.y && y <= DOOR.y + DOOR.h) {
       const front = frontGuest();
+      if (!front && secrets.secretTap(ctx, 'cafe', x, y)) return; // the door bell
       if (front) { state.selectedGuest = front.id; sfx('tap'); }
       else if (!state.doorOpen) { toast('Door is closed for today'); sfx('error'); }
       return;
     }
-    if (x >= COUNTER.x - 8 && y >= MACHINE.y - 20 && y <= COUNTER.y + COUNTER.h + 14) { tapCounter(); return; }
+    if (x >= COUNTER.x - 8 && y >= MACHINE.y - 20 && y <= COUNTER.y + COUNTER.h + 14) {
+      // nothing to pick up: the tap may be on the barista / menu board hotspot instead
+      const idle = !neededFromCounter().length && !state.counter.brewing && !state.counter.queue.length && unneededOnTray() === 0;
+      if (idle && secrets.secretTap(ctx, 'cafe', x, y)) return;
+      tapCounter(); return;
+    }
     const rp = DECOR_ANCHOR.back;
     if (progress.placed.back === 'record_player' && Math.abs(x - rp.x) < 42 && y > rp.y - 130 && y < rp.y + 6) {
       const music = !progress.settings.music;
       setSettings({ music });
       toast(music ? 'Music on' : 'Music off');
       sfx('tap');
+      secretEv('record_toggle');
       return;
     }
-    let best = -1, bd = TABLE_HIT_R;
+    let best = -1, bd = TABLE_HIT_R + 8;
     for (const t of state.tables) {
       if (!t.unlocked) continue;
       const p = tablePoint(t.index);
@@ -680,6 +802,7 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
       if (d < bd) { bd = d; best = t.index; }
     }
     if (best >= 0) { tapTable(best); return; }
+    if (state.selectedGuest == null && secrets.secretTap(ctx, 'cafe', x, y)) return;
     state.selectedGuest = null;
   }
 
@@ -719,38 +842,35 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
   function computeHint(): GameState['hint'] {
     if (state.mode !== 'playing') return null;
     if (state.tutorial.active) return tutorialHint();
-    if (!progress.settings.hints) return null;
-    const w = state.waiter;
-    const gs = guests();
-    if (waiterBusy()) return { text: 'On the way…', target: null };
-    const serveG = gs.find((g) => g.phase === 'waiting' && g.order && w.tray.includes(g.order));
-    if (serveG) return { text: 'Tap the table to serve', target: tablePoint(serveG.table!) };
-    if (neededFromCounter().length && (w.tray.length < trayCap() || unneededOnTray() > 0)) {
-      return { text: 'Tap the counter to pick up', target: { ...COUNTER_TAP } };
-    }
-    const ord = gs.find((g) => g.phase === 'ordering');
-    if (ord) return { text: 'Tap the table to take the order', target: tablePoint(ord.table!) };
-    const front = frontGuest();
-    if (front) {
-      const free = state.tables.find(tableFree);
-      if (free) {
-        const sel = state.selectedGuest != null && doorQueue.includes(state.selectedGuest);
-        return sel
-          ? { text: 'Tap a free table', target: tablePoint(free.index) }
-          : { text: 'Tap the guest at the door', target: { x: front.x, y: front.y - 40 } };
-      }
-    }
-    const coins = state.tables.find((t) => t.coins > 0);
-    if (coins) return { text: 'Tap the coins', target: tablePoint(coins.index) };
-    if (gs.some((g) => g.phase === 'waiting')) return { text: 'The barista is making it…', target: null };
-    if (gs.some((g) => g.phase === 'eating')) return { text: 'Enjoying their treat…', target: null };
-    if (gs.some((g) => g.phase === 'reading')) return { text: 'Reading the menu…', target: null };
-    if (!state.doorOpen) return { text: 'Closing time…', target: null };
-    return { text: 'Waiting for the next guest…', target: null };
+    // after the first-customer tutorial the café has no hint pill / tap marker
+    return null;
+  }
+  /* ---------- story ---------- */
+  /** Where to go back to after a story that has no fixed follow-up (chapter stories etc.). */
+  let storyReturn: { mode: GameState['mode']; scene: Scene } | null = null;
+  /** Stories asked for while busy (café day running, popup open, another story): played at the next calm moment. */
+  let pendingStories: StoryId[] = [];
+  const CALM_MODES = new Set<GameState['mode']>(['dayEnd', 'home', 'konbini']);
+  const storyExists = (id: StoryId) => Array.isArray(STORIES[id]) && STORIES[id].length > 0;
+
+  /** Play a story now if nothing else is going on, else queue it. */
+  function requestStory(id: StoryId) {
+    if (!storyExists(id)) return;
+    if (state.story?.id === id || pendingStories.includes(id)) return;
+    if (state.mode === 'story' || state.popup || !CALM_MODES.has(state.mode)) { pendingStories.push(id); return; }
+    playStory(id);
   }
 
-  /* ---------- story ---------- */
+  function flushStories() {
+    if (!CALM_MODES.has(state.mode) || state.popup) return;
+    while (pendingStories.length) {
+      const id = pendingStories.shift()!;
+      if (storyExists(id)) { playStory(id); return; }
+    }
+  }
+
   function playStory(id: StoryId) {
+    if (state.mode !== 'story') storyReturn = { mode: state.mode, scene: state.scene };
     state.mode = 'story';
     state.story = { id, panel: 0 };
     state.hint = null;
@@ -767,14 +887,26 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     state.story = null;
     if (!progress.storySeen.includes(st.id)) progress.storySeen.push(st.id);
     save();
+    const ret = storyReturn;
+    storyReturn = null;
     switch (st.id) {
       case 'intro': startCleanup(); break;
       case 'cleanup_done': startWorkDay(); break;
       case 'payday': state.mode = 'dayEnd'; break;
       case 'home_intro':
-      case 'dream': state.scene = 'home'; state.mode = 'home'; break;
+      case 'dream':
+        state.mode = 'home';
+        if (state.scene !== 'home') setScene('home');
+        break;
+      default: {
+        const mode = ret && ret.mode !== 'story' && ret.mode !== 'paused' ? ret.mode : 'home';
+        const scene: Scene = ret ? ret.scene : 'home';
+        state.mode = mode;
+        if (state.scene !== scene) setScene(scene);
+      }
     }
     emit({ type: 'progress' });
+    flushStories();
   }
 
   /* ---------- day cycle ---------- */
@@ -795,10 +927,12 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
   }
 
   function startWorkDay() {
+    state.calendar = calendarInfo(now());
     state.theme = resolveTheme(progress.theme, now());
     resetDay();
-    state.scene = 'cafe';
     state.story = null;
+    state.shootingStar = null;
+    state.konbini = { basket: [], bear: home.newHomeBear() };
     state.chores = [];
     bonus = home.homeBonus(progress.home);
     home.startWorkDay(progress.home);
@@ -808,10 +942,21 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
       spawnGuest();
     }
     state.mode = 'playing';
+    setScene('cafe');
+    progEvent({ kind: 'dayStart' });
+    checkSeason();
+    const fest = state.calendar.today;
+    if (fest) {
+      const key = `fest:${fest}:${state.calendar.date.year}`; // once per festival per year
+      if (!progress.secretCounters[key]) { progress.secretCounters[key] = 1; secretEv('festival_day'); }
+    }
     state.hint = computeHint();
     save();
-    emit({ type: 'decor' });
     emit({ type: 'progress' });
+  }
+
+  function checkSeason() {
+    try { prog.checkSeasonEvents(pctx); } catch (err) { console.error(err); }
   }
 
   function endDay() {
@@ -832,10 +977,16 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     progress.totalServed += s.served;
     if (s.served > 0) progress.tutorialDone = true;
     save();
+    if (s.stars === 3) secretEv('day_three_stars');
+    if (progress.home.wallet >= 300) secretEv('rich_wallet');
     sfx('dayEnd');
     emit({ type: 'dayEnd', stats: { ...s } });
-    emit({ type: 'progress' });
     if (!progress.storySeen.includes('payday')) playStory('payday');
+    // chapter stories from today wait behind the payday story (or play now)
+    progEvent({ kind: 'dayEnd' });
+    takeDeferredStories();
+    flushStories();
+    emit({ type: 'progress' });
   }
 
   function update(dt: number) {
@@ -843,7 +994,11 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     state.time += dt;
     for (const e of state.effects) e.age += dt;
     state.effects = state.effects.filter((e) => e.age < e.life);
+    try { secrets.updateSecrets(ctx, dt); } catch (err) { console.error(err); }
+    // (home.updateHome runs updateProgression itself)
     if (state.mode === 'home') { home.updateHome(ctx, dt); return; }
+    try { prog.updateProgression(pctx, dt); } catch (err) { console.error(err); }
+    if (state.mode === 'konbini') { konbini.updateKonbini(kctx, dt); return; }
     if (state.mode === 'cleanup') {
       const w = state.waiter;
       if (w.path.length) moveAlong(w, w.path, waiterSpeed() * dt);
@@ -854,7 +1009,7 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     if (!state.tutorial.active) state.dayTime += dt; // the clock waits while learning
     if (state.doorOpen && state.dayTime >= state.dayLength) {
       state.doorOpen = false;
-      toast('Closing time! The door is closed for today');
+      // (the day bar shows "Closed"; no toast)
     }
     updateSpawn(dt);
     updateGuests(dt);
@@ -882,6 +1037,7 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     if (id === 'tables') for (const t of state.tables) t.unlocked = t.index < 3 + level('tables');
     save();
     sfx('buy');
+    secretEv('bought_upgrade');
     emit({ type: 'progress' });
     if (id === 'table_style') emit({ type: 'decor' });
     return true;
@@ -907,6 +1063,7 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     addEffect('sparkle', 180, 300);
     save();
     sfx('buy');
+    secretEv('bought_decor');
     emit({ type: 'progress' });
     emit({ type: 'decor' });
     return true;
@@ -931,40 +1088,117 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     resetDay();
     state.doorOpen = false;
     state.mode = 'title';
-    state.scene = 'cafe';
     state.story = null;
     state.chores = [];
     state.tutorial = newTutorial();
+    state.popup = null;
+    state.shootingStar = null;
+    state.reaction = null;
+    state.konbini = { basket: [], bear: home.newHomeBear() };
+    storyReturn = null;
+    pendingStories = [];
+    setScene('cafe');
+  }
+
+  /* ---------- places: home ⇄ konbini ---------- */
+  function goTo(scene: 'home' | 'konbini') {
+    if (scene === 'konbini') {
+      if (state.mode !== 'home') return;
+      if (!progress.konbiniOpen) { toast("The konbini isn't open yet"); sfx('error'); return; }
+      if (state.homeBear.action !== null) { toast('Mocha is busy'); sfx('error'); return; }
+      state.shootingStar = null;
+      state.konbini = { basket: [], bear: home.newHomeBear() };
+      state.mode = 'konbini';
+      getIssue(progress, state.calendar); // today's Gazette sale applies to prices
+      konbini.enterKonbini(kctx);
+      setScene('konbini');
+      sfx('door');
+      emit({ type: 'progress' });
+      return;
+    }
+    if (state.mode !== 'konbini') return;
+    state.konbini.basket = [];
+    state.mode = 'home';
+    home.enterHome(ctx);
+    setScene('home');
+    sfx('door');
+    checkSeason();
+    emit({ type: 'progress' });
+    flushStories();
+  }
+
+  /* ---------- popups ---------- */
+  function dismissPopup() {
+    if (!state.popup) return;
+    state.popup = null;
+    // shows the next waiting popup, or plays a finished chapter's story (via pctx.playStory → requestStory)
+    try { prog.nextPopup(pctx); } catch (err) { console.error(err); }
+    if (!state.popup) flushStories();
+    emit({ type: 'progress' });
+  }
+
+  /** Chapter stories progression deferred while the café day was running. */
+  function takeDeferredStories() {
+    for (let i = 0; i < 10; i++) {
+      const id = prog.takeQueuedStory();
+      if (!id) break;
+      requestStory(id);
+    }
+  }
+
+  /* ---------- cooking / fire (home.ts) ---------- */
+  function setFire(on: boolean) {
+    if (state.mode !== 'home') return;
+    if (home.setFire(ctx, on)) emit({ type: 'decor' });
   }
 
   function resetSave() {
+    // drop popups / stories progression still has waiting for the old save
+    quiet = true;
+    for (let i = 0; i < 50 && (state.popup || i === 0); i++) {
+      state.popup = null;
+      const mode = state.mode;
+      state.mode = 'playing'; // keeps nextPopup from playing a story
+      try { prog.nextPopup(pctx); } catch { /* ignore */ }
+      state.mode = mode;
+    }
+    state.popup = null;
+    for (let i = 0; i < 50 && prog.takeQueuedStory(); i++) { /* drain */ }
+    quiet = false;
+    pendingStories = [];
     clearProgress(storage);
     progress = defaultProgress();
     state.progress = progress;
     state.theme = resolveTheme(progress.theme, now());
     state.lastDay = null;
     state.homeBear = home.newHomeBear();
+    state.calendar = calendarInfo(now());
     toTitle();
     emit({ type: 'progress' });
     emit({ type: 'decor' });
   }
+
+  // festival-day gifts / "coming soon" popups when the game opens
+  checkSeason();
 
   const api: GameApi = {
     get state() { return state; },
     catalog: {
       menu: MENU, upgrades: UPGRADES, decor: DECOR, themes: THEMES,
       homeActions: home.HOME_ACTIONS, homeItems: home.HOME_ITEMS,
+      ingredients: INGREDIENTS, snacks: SNACKS, dishes: DISHES, goods: GOODS,
+      regulars: REGULARS, chapters: CHAPTERS, seasonEvents: SEASON_EVENTS, secrets: SECRETS,
     },
     subscribe(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
     update,
     startDay() {
+      state.calendar = calendarInfo(now());
       state.theme = resolveTheme(progress.theme, now());
       if (!progress.storySeen.includes('intro')) {
         resetDay();
         state.doorOpen = false;
-        state.scene = 'cafe';
+        setScene('cafe');
         playStory('intro');
-        emit({ type: 'decor' });
         return;
       }
       if (!progress.cleanupDone) { startCleanup(); return; }
@@ -982,19 +1216,48 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
       finishStory();
     },
     goHome() {
-      state.scene = 'home';
+      if (state.mode === 'home' || state.mode === 'konbini') return;
       state.hint = null;
       state.selectedGuest = null;
-      home.enterHome(ctx);
-      emit({ type: 'decor' });
+      state.mode = 'home';
+      setScene('home');
       if (!progress.storySeen.includes('home_intro')) playStory('home_intro');
-      else { state.mode = 'home'; emit({ type: 'progress' }); }
+      // (home.enterHome sends the 'enterHome' progress event; stories it triggers wait behind home_intro)
+      home.enterHome(ctx);
+      checkSeason();
+      takeDeferredStories();
+      emit({ type: 'progress' });
+      flushStories();
     },
     homeAction: (id: HomeActionId) => home.homeAction(ctx, id),
     buyHomeItem: (id: HomeItemId) => home.buyHomeItem(ctx, id),
     placeHomeItem: (id: HomeItemId) => home.placeHomeItem(ctx, id),
     homeBonus: () => home.homeBonus(progress.home),
     canDoHomeAction: (id: HomeActionId) => home.canDoHomeAction(ctx, id),
+    goTo,
+    cookDish: (id: DishId) => state.mode === 'home' && home.cookDish(ctx, id),
+    canCook: (id: DishId) => home.canCook(ctx, id),
+    konbiniTake: (id: KonbiniStockId) => konbini.konbiniTake(kctx, id),
+    konbiniRemove: (id: KonbiniStockId) => konbini.konbiniRemove(kctx, id),
+    konbiniCheckout: () => konbini.konbiniCheckout(kctx),
+    basketTotal: () => konbini.basketTotal(kctx),
+    dismissPopup,
+    currentGoal: () => prog.currentGoal(progress),
+    friendLevel: (id: RegularId) => prog.friendLevel(progress, id),
+    setFire,
+    eatSnack: (id: SnackId) => state.mode === 'home' && home.eatSnack(ctx, id),
+    journal: () => secrets.journalEntries(progress),
+    newspaper: () => getIssue(progress, state.calendar),
+    readNewspaper() {
+      const issue = getIssue(progress, state.calendar);
+      const first = markIssueRead(progress, issue);
+      if (first) {
+        progress.home.happiness = Math.max(0, Math.min(100, Math.round(progress.home.happiness + 2)));
+        secretEv('read_newspaper');
+      }
+      save();
+      emit({ type: 'progress' });
+    },
     quitToTitle() {
       save();
       toTitle();

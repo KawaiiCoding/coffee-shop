@@ -24,6 +24,7 @@ interface FP {
 const PAL: Record<ThemeId, FP> = {
   everyday: { a: '#f2b5b0', b: '#a8c69f', c: '#e9c46a', cream: '#fff6ea', wood: '#dcae84', woodD: '#c08e66', front: '#f6d6c8', yarn: '#f2b5b0', machine: '#a8c69f' },
   spring: { a: '#f5b3c8', b: '#a6dcc3', c: '#f6e19b', cream: '#fff4f6', wood: '#e8c19c', woodD: '#cfa07c', front: '#fbe0e8', yarn: '#a6dcc3', machine: '#f5b3c8' },
+  summer: { a: '#f39aa6', b: '#8fcaee', c: '#fbe07a', cream: '#fffdf2', wood: '#e6c39a', woodD: '#c99f76', front: '#d7eef3', yarn: '#a9dcc9', machine: '#8fcaee' },
   christmas: { a: '#d9625f', b: '#79a886', c: '#efcf7a', cream: '#fff3e2', wood: '#c99268', woodD: '#a8714f', front: '#f3e2cf', yarn: '#d9625f', machine: '#d9625f' },
   halloween: { a: '#ef9a52', b: '#9a7cb6', c: '#6a5878', cream: '#f6ead8', wood: '#a98266', woodD: '#86624c', front: '#d9c8e2', yarn: '#ef9a52', machine: '#9a7cb6' },
 };
@@ -159,6 +160,14 @@ export function counterBack(theme: ThemeId): string {
     + sh(box(332, 132, 26, 40, 4), p.woodD)
     + fl(box(335, 135, 19, 33, 3, 0.5), '#55625b')
     + ln('M339,145 h12 M339,155 h9', 1.4, CREAM);
+  if (theme === 'summer') {
+    // little shaved-ice banner hanging under the chalkboard
+    s += ln('M336,172 L336,176 M354,172 L354,176', 1.1)
+      + sh('M334,176 C340,175.4 348,176.6 356,176 L356,192 C350,192.6 340,191.4 334,192z', CREAM, 1.6)
+      + fl('M334.6,176.4 C340,175.8 348,177 355.4,176.4 L355.4,180 C348,180.6 340,179.4 334.6,180z', '#e8697e', 0.9)
+      + ln('M336,188 q2.3,-2.4 4.6,0 q2.3,2.4 4.6,0 q2.3,-2.4 4.6,0 q2.3,2.4 4.2,0', 1.3, '#5fb4dc')
+      + `<circle cx="345" cy="184" r="1.6" fill="#e8697e"/>`;
+  }
   // espresso machine at MACHINE (40x44): bold outline, few parts
   s += sh(box(mx + 12, my - 6, 10, 7, 2, 0.4), p.cream, 2)
     + sh(box(mx + 1, my + 2, 38, 34, 7), p.machine, 2.8)

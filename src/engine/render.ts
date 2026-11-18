@@ -1,9 +1,10 @@
 /* Scene renderer: static layer (rebuilt on decor/theme change) + dynamic layer (~30fps). */
 import * as art from '../art';
 import type { Chore, DecorId, DecorSlot, DrawCharacterOpts, GameApi, GameState, TableStyle, CharacterLook } from '../types';
-import { BARISTA, DECOR_ANCHOR, READY_SPOTS, TABLES } from '../layout';
+import { BARISTA, DECOR_ANCHOR, READY_SPOTS, SECRET_SPOTS, TABLES } from '../layout';
 import { isMessChore, seatPoint, type GuestInt } from './game';
 import { homeDynamic, homeStatic } from './render-home';
+import { konbiniDynamic, konbiniStatic } from './render-konbini';
 import { BARISTA_LOOK, WAITER_LOOK } from './looks';
 
 export interface SceneRenderer { render(): void; }
@@ -35,20 +36,19 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
   let lastTheme = '';
   let lastScene = '';
   let lastFrame = -Infinity;
-  game.subscribe((e) => { if (e.type === 'decor') staticDirty = true; });
+  game.subscribe((e) => { if (e.type === 'decor' || e.type === 'scene') staticDirty = true; });
 
   /* per-guest character markup cache, keyed by visual state */
   const cache = new Map<string, string>();
   function drawChar(id: string, look: CharacterLook, o: DrawCharacterOpts): string {
     const wp = o.walkPhase === undefined ? '' : Math.floor(o.walkPhase * 8);
     const key = `${id}|${o.pose}|${o.mood}|${o.facing}|${wp}|${o.carrying?.join(',') ?? ''}`;
-    let s = cache.get(key);
-    if (s === undefined) {
-      if (cache.size > 400) cache.clear();
-      s = art.character(look, o);
-      cache.set(key, s);
-    }
-    return s;
+    const hit = cache.get(key);
+    if (hit !== undefined) return hit;
+    if (cache.size > 400) cache.clear();
+    const svg: string = art.character(look, o) ?? '';
+    cache.set(key, svg);
+    return svg;
   }
 
   const decorCache = new Map<string, string>();
@@ -65,6 +65,7 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
     lastScene = s.scene;
     staticDirty = false;
     if (s.scene === 'home') { staticG.innerHTML = homeStatic(s); return; }
+    if (s.scene === 'konbini') { staticG.innerHTML = konbiniStatic(s); return; }
     const placed = s.progress.placed;
     const dec = (slot: DecorSlot) => {
       const id = placed[slot];
@@ -207,6 +208,12 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
     sorted.sort((a, b) => a.y - b.y);
     for (const e of sorted) out.push(e.svg);
 
+    // journal hotspot reaction (a tiny wiggle / sparkle on the tapped thing)
+    if (s.reaction) {
+      const sp = SECRET_SPOTS[s.reaction.spot];
+      if (sp && sp.scene === s.scene) out.push(at(sp.x, sp.y, art.secretReaction(s.reaction.spot, s.reaction.t)));
+    }
+
     // bubbles
     for (const g of guests) {
       let kind: Parameters<typeof art.bubble>[0] | null = null;
@@ -244,7 +251,7 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
       // throttle to ~30fps using game time (time keeps advancing in every mode)
       if (!force && s.time >= lastFrame && s.time - lastFrame < 1 / 30) return;
       lastFrame = s.time;
-      dynG.innerHTML = s.scene === 'home' ? homeDynamic(s) : buildDynamic(s);
+      dynG.innerHTML = s.scene === 'home' ? homeDynamic(s) : s.scene === 'konbini' ? konbiniDynamic(s) : buildDynamic(s);
     },
   };
 }

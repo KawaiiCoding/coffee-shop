@@ -1,8 +1,8 @@
 /* Character sheet: hand-shaped Bezier heads/bodies/ears/limbs, thick soft brown ink line,
    colour fill nudged off the line, dot eyes, rosy cheeks, little "w" mouth.
    Drawn in "doll" coordinates (feet at y=35, head top ~-51), then scaled so feet sit at (0,0). */
-import type { CharacterLook, DrawCharacterOpts, HatKind, MenuItemId, Species } from '../types';
-import { INK, EYE, CREAM, fl, ln, sh } from './kit';
+import type { CharacterLook, DrawCharacterOpts, HatKind, HeldProp, MenuItemId, Species } from '../types';
+import { INK, EYE, CREAM, fl, ln, sh, blob, box } from './kit';
 import { n } from './core';
 import { item } from './items';
 
@@ -60,7 +60,19 @@ const FLOWER_PETALS = (() => {
 const miniFlower = (x: number, y: number, petal: string, mid: string, s = 1) =>
   `<g transform="translate(${x},${y}) scale(${s})"><path d="${FLOWER_PETALS}" fill="${petal}" stroke="${OUT}" stroke-width="1.1"/><circle r="1.5" fill="${mid}"/></g>`;
 
-function hat(kind: HatKind): string {
+/** Frogs: hats rest on top of the two eye bumps (brim above the eyes) instead of over them. */
+const frogTop = (base: number, inner: string) => `<g transform="translate(0.5,-54) scale(.85) translate(0,${base})">${inner}</g>`;
+
+function hat(kind: HatKind, frog = false): string {
+  if (frog && (kind === 'santa' || kind === 'witch')) return frogTop(kind === 'santa' ? 34 : 37, hat(kind));
+  if (frog && kind === 'flowercrown') {
+    // vine follows the eye bumps, dipping between them; flowers beside and between the eyes
+    return ln('M-19,-49 C-15,-61 -6,-61 0.5,-53 C7,-61 16,-61 20,-49', 2.2, '#6aa883')
+      + `<path d="M-9,-59 C-11,-63 -7,-64 -6,-60 M9,-60 C10,-64 14,-62 12,-59" fill="#8fc3a7" stroke="${OUT}" stroke-width="1"/>`
+      + miniFlower(-19, -48, '#f7b6c8', '#f6cf6b', 0.95)
+      + miniFlower(0.5, -54, '#f6cf6b', '#e2607a', 1)
+      + miniFlower(20, -48, CREAM, '#9dbbe6', 0.95);
+  }
   if (kind === 'santa') {
     return sh('M-17,-42 C-15,-57 -2,-66 11,-64 C20,-62 27,-55 30,-46 C26,-48 22,-48 19,-45 C10,-44 -8,-44 -17,-42z', '#d2443f', 2.2)
       + sh('M-20,-42 C-12,-47 12,-48 21,-41 C22,-38 21,-36 20,-34 C10,-39 -10,-39 -20,-35 C-22,-37 -22,-40 -20,-42z', CREAM, 2.2)
@@ -84,6 +96,90 @@ function hat(kind: HatKind): string {
   return '';
 }
 
+/* ---------- seated / lying / holding parts (doll coords) ---------- */
+const SIT_BODY = 'M-11,-15 C-20,-7 -23,8 -14,11 C-6,13.5 8,13.5 15,11 C23,7 18,-7 10,-15z';
+const SIT_LEG_L = 'M-14,5 C-19,8 -18,17 -11.5,17 C-6,17 -5,10 -7,6z';
+const SIT_LEG_R = 'M8,6 C6,10 7,17 12.5,17 C19,17 20,8 15,5z';
+/** Squash apron/belly/towel markup to fit the shorter seated body. */
+const SQ = 'translate(0,-10) scale(1,.66) translate(0,10)';
+/** Arms resting with paws on the lap / tummy (drawn in front of the body). */
+const REST_L = 'M-13,-8 C-20,-3 -19,5 -12,6 C-7,6.5 -6,2 -8,-1z';
+const REST_R = 'M13,-8 C20,-3 19,5 12,6 C7,6.5 6,2 8,-1z';
+/** Arms reaching forward, paws in front of the chest (for two-paw props). */
+const HOLD_L = 'M-13,-9 C-20,-5 -20,2 -13.5,2.5 C-9,3 -7,-1 -8.5,-4z';
+const HOLD_R = 'M13,-9 C20,-5 20,2 13.5,2.5 C9,3 7,-1 8.5,-4z';
+/** Right arm variants for one-paw props. */
+const ARM_PHONE = 'M11,-9 C17,-12 21,-17 21,-22 C21,-26 16,-27 15.5,-23 C15,-19 13,-15 9,-12z';
+const ARM_OUT = 'M12,-9 C19,-9 25,-6 25.5,-1.5 C26,2.5 21,3.5 13,1z';
+const ARM_LIFT = 'M12,-9 C18,-11 22,-8 21.5,-4 C21,0 16,0.5 11,-2z';
+
+const TOWEL_C = '#bfe3ee', TOWEL_HI = '#e6f5f9';
+const TOWEL_BODY = 'M-16,-11 C-7,-13 7,-13 16,-11 C21,0 21,14 15,23 C5,27 -6,27 -14,23 C-21,13 -21,0 -16,-11z';
+const TOWEL_FOLD = 'M-17,-13 C-8,-16 8,-16 17,-13 C18.5,-10 18,-8 16.5,-6.5 C7,-9.5 -7,-9.5 -16.5,-6.5 C-18.5,-8.5 -18.5,-11 -17,-13z';
+const TURBAN = 'M-21,-35 C-25,-49 -11,-59 1,-58 C14,-59 26,-49 21,-35 C14,-41 -13,-41 -21,-35z';
+const TURBAN_KNOT = 'M-3,-56 C-6,-64 4,-67 7,-62 C9,-58 5,-55 2,-56z';
+const DROP = 'M0,-3.5 C1.8,-1 2.6,.6 2.6,1.5 C2.6,3 1.4,4 0,4 C-1.4,4 -2.6,3 -2.6,1.5 C-2.6,.6 -1.8,-1 0,-3.5z';
+const drop = (x: number, y: number, s = 1) =>
+  `<path d="${DROP}" transform="translate(${x},${y}) scale(${s})" fill="#a9d8ef" stroke="${OUT}" stroke-width="1.1"/>`;
+
+/** Towel wrapped round the body (body markup coords). */
+const towelWrap = () => sh(TOWEL_BODY, TOWEL_C, 2.2) + sh(TOWEL_FOLD, TOWEL_HI, 2)
+  + ln('M9,-7 C7,2 8,10 6,16', 1.4) + ln('M-14,17 C-5,20 6,20 15,17', 1.6, '#fff');
+/** Towel turban (head coords). */
+const turban = () => sh(TURBAN, TOWEL_C, 2.2)
+  + ln('M-17,-42 C-8,-50 8,-51 16,-46 M-12,-37 C-3,-45 10,-46 18,-39', 1.4) + sh(TURBAN_KNOT, TOWEL_HI, 2);
+
+type Hold = HeldProp | undefined;
+const TWO_PAW: HeldProp[] = ['towel', 'book', 'bowl', 'gift'];
+const ONE_PAW: HeldProp[] = ['phone', 'spatula', 'chopsticks'];
+
+/** The prop (plus any arm that grips it), drawn in front of everything. */
+function held(h: HeldProp, c: string, ac: string): string {
+  const arms = sh(HOLD_L, c) + sh(HOLD_R, c);
+  switch (h) {
+    case 'towel': // draped over both paws
+      return arms
+        + sh('M-15,-4 C-6,-6.5 7,-6.5 16,-4 C17,3 16,9 15,13 C12,11 9,14 6,12 C3,14 0,11 -3,13 C-6,11 -9,14 -12,12 C-15,13 -16,6 -15,-4z', TOWEL_C, 2.2)
+        + ln('M-14.5,6 C-5,5 6,5 15.5,6', 1.6, '#fff') + ln('M-15,-1 C-5,-2.5 6,-2.5 16,-1', 1.2);
+    case 'book':
+      return sh('M-14,-7 L-13.5,6 C-8,4 -3,5 0.5,7.5 C4,5 9,4 14.5,6 L15,-7 C9,-9 4,-8 0.5,-6 C-3,-8 -9,-9 -14,-7z', ac, 2)
+        + sh('M0.5,-9 C-4,-12 -10,-11 -12.5,-8.5 L-12,4 C-8,2 -3,2 0.5,5z M0.5,-9 C5,-12 11,-11 13.5,-8.5 L13,4 C9,2 4,2 0.5,5z', CREAM, 1.8)
+        + ln('M-9.5,-6 C-7,-7 -4.5,-7 -2.5,-6 M-9.5,-2.5 C-7,-3.5 -4.5,-3.5 -2.5,-2.5 M3.5,-6 C6,-7 8.5,-7 10.5,-6 M3.5,-2.5 C6,-3.5 8.5,-3.5 10.5,-2.5', 1.1)
+        + arms;
+    case 'bowl':
+      return ln('M-2,-12 c-2,-3 2,-4 0,-7 M4,-12 c-2,-3 2,-4 0,-7', 1.4, '#c9b1a3')
+        + sh('M-8.5,-4 C-8,-11 10,-11 10.5,-4z', '#fffdf8', 1.8)
+        + sh('M-11,-4.5 C-10,5 12,5 13,-4.5 C5,-3 -3,-3 -11,-4.5z M-3,2.8 C-2,5 4,5 5,2.8', '#86acd3', 2)
+        + ln('M-8,-1 C-3,0.5 5,0.5 10,-1', 1.3, '#fff')
+        + arms;
+    case 'gift':
+      return sh(box(-11, -8, 23, 15, 3, 0.8), '#f4a7b9', 2)
+        + `<path d="M0.5,-8 L0.5,7 M-11,-1 L12,-1" fill="none" stroke="${ac === '#f4a7b9' ? '#e2607a' : ac}" stroke-width="3"/>`
+        + sh('M0.5,-8 C-4,-15 -10,-12 -6,-8.5 C-4,-7.5 -1,-7.8 0.5,-8z M0.5,-8 C5,-15 11,-12 7,-8.5 C5,-7.5 2,-7.8 0.5,-8z', ac, 1.6)
+        + arms;
+    case 'phone': // old pink receiver at the ear, curly cord
+      return ln('M18,-16 c3,1.5 -1,3.5 2,5 c3,1.5 -1,3.5 2,5 c3,1.5 -1,3.5 2,5 c3,1.5 -1,3.5 2,5', 1.4)
+        + sh('M17,-39 C21,-41 27,-38 26,-34 C25.5,-31 23,-31 23,-27 C23,-24 25,-22.5 25,-19.5 C25,-15 19,-14 17,-17 C16,-19 19,-21 19,-24.5 C19,-28 16,-30 15.5,-33 C15.5,-35.5 16,-38 17,-39z', '#f5a9c0', 2)
+        + sh(ARM_PHONE, c);
+    case 'spatula':
+      return ln('M23.5,-1 L27,-17', 2.6, '#b5653d')
+        + sh('M23,-27 C24,-30.5 32,-30 32.5,-26.5 L30.5,-17.5 C28.5,-16 26,-16 24,-17.5z', '#d9d2cc', 1.8)
+        + ln('M26,-26 l-.6,6 M29,-26 l-.6,6', 1.1)
+        + sh(ARM_OUT, c);
+    case 'chopsticks':
+      return ln('M8,-17 C7,-13 10,-11 8,-7 C6,-3 9,-1 8,2', 3.4)
+        + ln('M8,-17 C7,-13 10,-11 8,-7 C6,-3 9,-1 8,2', 1.8, '#f6e2a8')
+        + ln('M21,-2 L6,-18 M23,-4 L9,-19.5', 1.8, '#b5653d')
+        + sh(ARM_LIFT, c);
+    case 'basket': // red-and-white basket hooked over the left arm
+      return sh('M-32,7 C-26,6 -14,6 -10,7 C-11,13 -12,17 -14,20 C-19,21 -25,21 -29,20 C-30,17 -31,13 -32,7z', '#de5b55', 2)
+        + ln('M-27,11.5 l.4,5 M-23,11.5 l.2,5.5 M-19,11.5 l0,5.5 M-15,11.5 l-.3,5', 1.8, '#fff')
+        + sh('M-33,5.5 C-26,3.5 -14,3.5 -9,5.5 C-8.7,7.5 -8.8,8.5 -9.5,9 C-15,8 -26,8 -32.5,9 C-33.3,8 -33.3,7 -33,5.5z', '#fff', 1.8)
+        + ln('M-29,5.5 C-28.5,-4 -14.5,-4 -13.5,5.5', 3.8) + ln('M-29,5.5 C-28.5,-4 -14.5,-4 -13.5,5.5', 1.8, '#fff');
+  }
+  return '';
+}
+
 /** Tray held at the side with up to 3 items. Doll coords. */
 function tray(items: MenuItemId[]): string {
   let s = sh('M15,-4 C17,-7 43,-7 45,-4 C45,-1 17,-1 15,-4z', '#d9d2cc', 1.8);
@@ -97,44 +193,67 @@ function tray(items: MenuItemId[]): string {
 
 function doll(look: CharacterLook, o: DrawCharacterOpts): string {
   const sp = look.species, c = look.color, c2 = look.color2 ?? c;
-  const sit = o.pose === 'sit', walk = o.pose === 'walk', gh = sp === 'ghost';
-  const carrying = !!(o.carrying && o.carrying.length && !sit);
-  const hatK = look.hat ?? 'none';
+  const sit = o.pose === 'sit', lie = o.pose === 'lie', walk = o.pose === 'walk', gh = sp === 'ghost';
+  const frog = sp === 'frog';
+  const towel = !!o.towel;
+  const carrying = !!(o.carrying && o.carrying.length && !sit && !lie);
+  const hold: Hold = carrying ? undefined : o.holding;
+  const two = !!hold && TWO_PAW.includes(hold), oneR = !!hold && ONE_PAW.includes(hold);
+  const rest = sit || lie;
+  const hatK = towel ? 'none' : look.hat ?? 'none';
   let acc = look.accessory;
   if (hatK !== 'none' && (acc === 'beret' || acc === 'bow' || acc === 'flower')) acc = 'none';
+  if (towel) acc = 'none';
   const ac = look.accentColor || '#e58a94';
   const limb = sp === 'duck' ? c2 : c;
   const ph = (o.walkPhase ?? 0) * Math.PI * 2, sw = walk ? Math.sin(ph) : 0;
+  const armRot = walk ? n(sw * 12) : 0;
   let s = '';
 
   if (gh) {
     const bottom = sit ? 12 : 26;
     s += `<g transform="translate(0,${sit ? 0 : 4})">`;
-    s += sh(GHOST_ARM_L, c) + (carrying ? '' : sh(GHOST_ARM_R, c));
+    if (!two) s += sh(GHOST_ARM_L, c) + (carrying || oneR ? '' : sh(GHOST_ARM_R, c));
     s += sh(ghostPath(bottom), c);
+    if (towel) s += `<g transform="translate(0,${sit ? -6 : 0}) scale(1.08,${sit ? 0.7 : 1})">${towelWrap()}</g>`;
   } else {
-    s += sit ? '<g transform="translate(0,-15) scale(1,.62) translate(0,15)">' : '<g>';
-    if (sp === 'fox') s += fl(FOX_TAIL, c) + fl(FOX_TIP, CREAM) + ln(FOX_TAIL);
+    s += '<g>';
+    if (sp === 'fox') s += (sit ? '<g transform="translate(0,-12)">' : '<g>') + fl(FOX_TAIL, c) + fl(FOX_TIP, CREAM) + ln(FOX_TAIL) + '</g>';
     if (!sit) {
       const lx = n(sw * 2.4), ly = n(-Math.max(0, sw) * 3), rx = n(-sw * 2.4), ry = n(-Math.max(0, -sw) * 3);
       s += (walk ? `<g transform="translate(${lx},${ly})">` : '<g>') + sh(LEG_L, limb) + '</g>';
       s += (walk ? `<g transform="translate(${rx},${ry})">` : '<g>') + sh(LEG_R, limb) + '</g>';
     }
-    const armRot = walk ? n(sw * 12) : 0;
-    s += (armRot ? `<g transform="rotate(${armRot} -12 -4)">` : '<g>') + sh(ARM_L, c) + '</g>';
-    if (!carrying) s += (armRot ? `<g transform="rotate(${-armRot} 12 -4)">` : '<g>') + sh(ARM_R, c) + '</g>';
-    s += sh(BODY, c);
-    if (acc === 'apron') {
-      s += sh(APRON, look.apronColor ?? CREAM, 2)
+    if (!rest && !two) {
+      s += (armRot ? `<g transform="rotate(${armRot} -12 -4)">` : '<g>') + sh(ARM_L, c) + '</g>';
+      if (!carrying && !oneR) s += (armRot ? `<g transform="rotate(${-armRot} 12 -4)">` : '<g>') + sh(ARM_R, c) + '</g>';
+    }
+    s += sh(sit ? SIT_BODY : BODY, c);
+    let front = '';
+    if (towel) {
+      front += towelWrap();
+    } else if (acc === 'apron') {
+      front += sh(APRON, look.apronColor ?? CREAM, 2)
         + `<path transform="translate(0,7) scale(.5)" d="M0,4 C-9,-3 -4,-10 0,-5 C4,-10 9,-3 0,4z" fill="${ac}"/>`
         + `<path d="M-6,13 C-3,12 3,12 6,13" fill="none" stroke="${INK}" stroke-opacity=".35" stroke-width="1.2" stroke-dasharray="1.5 2.5"/>`;
     } else if (sp !== 'sheep') {
-      s += `<path d="${BELLY}" fill="#fff" opacity=".35"/>`;
+      front += `<path d="${BELLY}" fill="#fff" opacity=".35"/>`;
     }
-    if (sp === 'sheep') s += `<path d="M-8,4 C-6,1 -3,1 -1,4 C1,1 4,1 6,4 M-9,13 C-7,10 -4,10 -2,13 C0,10 3,10 5,13" fill="none" stroke="${INK}" stroke-opacity=".3" stroke-width="1.2"/>`;
+    if (sp === 'sheep' && !towel) front += `<path d="M-8,4 C-6,1 -3,1 -1,4 C1,1 4,1 6,4 M-9,13 C-7,10 -4,10 -2,13 C0,10 3,10 5,13" fill="none" stroke="${INK}" stroke-opacity=".3" stroke-width="1.2"/>`;
+    s += sit ? `<g transform="${SQ}">${front}</g>` : front;
+    if (sit) {
+      // legs bent forward towards us: round thighs with the soles showing
+      for (const [d, x] of [[SIT_LEG_L, -11.5], [SIT_LEG_R, 12.5]] as const) {
+        s += sh(d, limb) + `<path d="${blob(x, 12.5, 3, 2.7)}" fill="#fff" opacity=".45"/>`;
+      }
+    }
+    if (rest && !two) s += sh(REST_L, c) + (oneR ? '' : sh(REST_R, c));
     s += '</g>';
   }
 
+  // head (tilted up on the pillow when lying down)
+  const tilt = lie && !gh;
+  if (tilt) s += '<g transform="rotate(18 0 -14)">';
   if (!gh) {
     for (const d of EARS[sp]) s += sh(d, sp === 'sheep' ? c2 : c);
     if (sp === 'bunny') s += `<path d="M-8,-54 C-10,-61 -9,-67 -7,-69 M11,-54 C12,-60 15,-64 17,-64" fill="none" stroke="#eaa6ae" stroke-width="3.5" stroke-linecap="round"/>`;
@@ -150,7 +269,6 @@ function doll(look: CharacterLook, o: DrawCharacterOpts): string {
   }
 
   // face
-  const frog = sp === 'frog';
   const ey = frog ? -51 : -31, ex = frog ? [-10.5, 11.5] : [-8, 9];
   const mood = o.mood;
   if (mood === 'happy') {
@@ -162,8 +280,9 @@ function doll(look: CharacterLook, o: DrawCharacterOpts): string {
     if (mood === 'calm') s += `<circle cx="${ex[0] + 0.7}" cy="${ey - 0.8}" r=".7" fill="#fff"/><circle cx="${ex[1] + 0.7}" cy="${ey - 0.3}" r=".7" fill="#fff"/>`;
   }
   if (mood === 'cross') s += ln(frog ? 'M-15,-57 l7,2.5 M17,-56.5 l-7,2.5' : 'M-13,-36.5 l7,2.5 M14,-36 l-7,2.5', 2, EYE);
-  const cheek = gh ? '#f3b7cf' : '#eda2a2';
-  s += `<ellipse cx="-14" cy="-25" rx="4" ry="2.6" transform="rotate(-8 -14 -25)" fill="${cheek}" opacity="${mood === 'cross' ? 0.95 : 0.75}"/><ellipse cx="15" cy="-24.5" rx="4" ry="2.6" transform="rotate(8 15 -24.5)" fill="${cheek}" opacity="${mood === 'cross' ? 0.95 : 0.75}"/>`;
+  const cheek = gh ? '#f3b7cf' : towel ? '#ec8f97' : '#eda2a2';
+  const cop = mood === 'cross' || towel ? 0.95 : 0.75, crx = towel ? 4.6 : 4;
+  s += `<ellipse cx="-14" cy="-25" rx="${crx}" ry="2.6" transform="rotate(-8 -14 -25)" fill="${cheek}" opacity="${cop}"/><ellipse cx="15" cy="-24.5" rx="${crx}" ry="2.6" transform="rotate(8 15 -24.5)" fill="${cheek}" opacity="${cop}"/>`;
   if (sp === 'duck') {
     s += sh('M-6,-26 C-4,-31 6,-31 8,-26 C6,-21 -4,-21 -6,-26z', c2, 1.8);
     if (mood === 'cross') s += ln('M-4,-25.5 C-1,-27 3,-27 6,-25.5', 1.2, EYE);
@@ -178,21 +297,32 @@ function doll(look: CharacterLook, o: DrawCharacterOpts): string {
     s += nose + ln(mouth, 1.6, EYE);
   }
 
-  // accessories
+  // accessories (frogs: no ears, eyes on top of the head -> everything sits around the eye bumps)
   if (acc === 'scarf') {
     s += sh('M5,-8 C6,0 9,7 7,9 C3,9 2,2 1,-6z', ac, 2)
       + sh('M-13,-17 C-4,-11 6,-11 13,-17 C14,-12 13,-9 12,-8 C4,-3 -5,-3 -12,-8z', ac, 2)
       + `<path d="M-6,-11 l1,4 M0,-10 l0,4 M6,-11 l-1,4" fill="none" stroke="${INK}" stroke-opacity=".45" stroke-width="1.2"/>`;
   }
   if (acc === 'bow') {
-    s += `<g transform="translate(14,-48) rotate(16)">${sh('M0,0 C-4,-7 -11,-6 -10,-1 C-10,5 -4,4 0,0z', ac, 1.8) + sh('M0,0 C4,-7 11,-6 10,-1 C10,5 4,4 0,0z', ac, 1.8)}<circle r="2.4" fill="${CREAM}" stroke="${OUT}" stroke-width="1.5"/></g>`;
+    const bt = frog ? 'translate(23.5,-41) rotate(22) scale(.8)' : 'translate(14,-48) rotate(16)';
+    s += `<g transform="${bt}">${sh('M0,0 C-4,-7 -11,-6 -10,-1 C-10,5 -4,4 0,0z', ac, 1.8) + sh('M0,0 C4,-7 11,-6 10,-1 C10,5 4,4 0,0z', ac, 1.8)}<circle r="2.4" fill="${CREAM}" stroke="${OUT}" stroke-width="1.5"/></g>`;
   }
   if (acc === 'flower') {
-    const fp = frog ? '-20,-35' : '-13,-48';
-    s += `<g transform="translate(${fp})"><path d="${FLOWER_PETALS}" transform="scale(1.5)" fill="${CREAM}" stroke="${OUT}" stroke-width=".9"/><circle r="2.2" fill="${ac}"/></g>`;
+    const fp = frog ? '-22,-43' : '-13,-48';
+    s += `<g transform="translate(${fp})"><path d="${FLOWER_PETALS}" transform="scale(${frog ? 1.3 : 1.5})" fill="${CREAM}" stroke="${OUT}" stroke-width=".9"/><circle r="2.2" fill="${ac}"/></g>`;
   }
-  if (acc === 'beret') s += sh('M-15,-46 C-13,-58 12,-61 18,-48 C10,-44 -6,-43 -15,-46z', ac) + ln('M2,-58 l1,-4', 2);
-  s += hat(hatK);
+  if (acc === 'beret') {
+    s += frog
+      ? sh('M-7,-48 C-6.5,-55.5 7.5,-56.5 8.5,-48.5 C3.5,-46.5 -2.5,-46.5 -7,-48z', ac, 2) + ln('M1,-55.5 l.6,-3', 1.8)
+      : sh('M-15,-46 C-13,-58 12,-61 18,-48 C10,-44 -6,-43 -15,-46z', ac) + ln('M2,-58 l1,-4', 2);
+  }
+  s += hat(hatK, frog);
+  if (towel) {
+    s += (frog ? frogTop(35, turban()) : turban()) + drop(-25, -41) + drop(25, -16, 0.8);
+  }
+  if (tilt) s += '</g>';
+
+  if (hold) s += (armRot && hold === 'basket' ? `<g transform="rotate(${armRot} -12 -4)">` : '<g>') + held(hold, c, ac) + '</g>';
   if (gh) s += '</g>';
 
   if (carrying) {
@@ -204,13 +334,17 @@ function doll(look: CharacterLook, o: DrawCharacterOpts): string {
   return s;
 }
 
-/** Character with feet at (0,0). Standing ~78 units tall, seated ~56. */
+/** Character with feet at (0,0). Standing ~78 units tall, seated ~59 (seat at (0,0)).
+ *  'lie': on its back, head to the left, (0,0) = centre of the body, ~70 x 34. */
 export function character(look: CharacterLook, opts: DrawCharacterOpts): string {
   const f = opts.facing === -1 ? -1 : 1;
   const sit = opts.pose === 'sit';
   const walk = opts.pose === 'walk';
+  if (opts.pose === 'lie') {
+    return `<g stroke-linecap="round" stroke-linejoin="round"><g transform="scale(${n(SCALE * 0.9)}) rotate(-90) translate(0,-5)">${doll(look, opts)}</g></g>`;
+  }
   const bob = walk ? n(-Math.abs(Math.sin((opts.walkPhase ?? 0) * Math.PI * 2)) * 1.6) : 0;
   const shadow = sit ? '' : `<ellipse cx="0" cy="0" rx="16" ry="3.4" fill="${OUT}" opacity=".14"/>`;
-  const ty = sit ? -11 : -35 + bob;
+  const ty = sit ? -12 : -35 + bob;
   return `<g stroke-linecap="round" stroke-linejoin="round">${shadow}<g transform="scale(${SCALE * f},${SCALE}) translate(0,${ty})">${doll(look, opts)}</g></g>`;
 }
