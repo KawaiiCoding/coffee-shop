@@ -3,10 +3,10 @@
    game.ts / home.ts / konbini.ts call these. Content lives in src/content/secrets.ts.
    ===================================================================== */
 import type {
-  GameEvent, GameState, Popup, Progress, Scene, SecretDef, SecretEventId, SecretSpotId, SecretWhen, SfxName,
+  GameEvent, GameState, Progress, Scene, SecretDef, SecretEventId, SecretSpotId, SecretWhen, SfxName,
 } from '../types';
 import type { ProgCtx } from './progression';
-import { grantReward, queuePopup } from './progression';
+import { grantReward } from './progression';
 import { SECRETS } from '../content/secrets';
 import { SECRET_SPOTS } from '../layout';
 
@@ -62,19 +62,17 @@ function whenOk(ctx: SecretCtx, w: SecretWhen | undefined): boolean {
   return true;
 }
 
-/** Unlock a journal page: record it, grant its reward, queue the popup, save. */
+/** Unlock a journal page: record it, grant its reward, tell the UI, save. */
 function unlock(ctx: SecretCtx, def: SecretDef) {
   const p = ctx.progress;
   if (p.secrets.includes(def.id)) return;
   p.secrets.push(def.id);
-  const rewards = def.reward ? [def.reward] : [];
   if (def.reward) {
     try { grantReward(ctx.prog, def.reward); } catch (err) { console.error(err); }
   }
-  const popup: Popup = { kind: 'secret', title: 'New journal page!', text: def.title, rewards };
-  // the popup plays the 'unlock' sound when it shows; if it has to wait its turn, chime now
-  if (ctx.state.popup) ctx.emit({ type: 'sfx', name: 'unlock' });
-  queuePopup(ctx.prog, popup);
+  // a small tappable note instead of a full popup: finding a page never stops the game
+  ctx.emit({ type: 'sfx', name: 'unlock' });
+  ctx.emit({ type: 'secret', id: def.id, title: def.title });
   ctx.emit({ type: 'progress' });
   ctx.save();
 }

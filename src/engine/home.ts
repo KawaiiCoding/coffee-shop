@@ -382,7 +382,7 @@ function blockReason(progress: Progress, id: HomeActionId): string | null {
       if (!anyCookable(progress) && !anySnack(home)) return Object.keys(home.pantry).length ? 'Need more groceries' : 'Pantry is empty';
       return null;
     case 'eat':
-      return home.meal ? null : 'Nothing cooked yet';
+      return home.meal ? null : anySnack(home) ? 'Pick a snack' : 'Nothing to eat yet. Cook something!';
     case 'call_mom':
       if (!hasFurniture(home, 'phone')) return 'No phone yet';
       if (home.doneToday.includes(id)) return 'Already called Mom today';
@@ -574,11 +574,6 @@ function finishAction(ctx: HomeCtx, id: HomeActionId) {
     b.facing = 1;
     ctx.emit({ type: 'sfx', name: 'door' });
   }
-  if (id === 'call_mom') {
-    const line = MOM_LINES[Math.max(0, progress.day) % MOM_LINES.length];
-    ctx.emit({ type: 'toast', text: `Mom: “${line}”` });
-    progressEvent(ctx.prog, { kind: 'call' });
-  }
   if (id === 'save') progressEvent(ctx.prog, { kind: 'saved' });
   if (id === 'bath') secretEvent(ctx, 'bath');
   if (id === 'call_mom') secretEvent(ctx, 'called_mom');
@@ -640,6 +635,12 @@ export function updateHome(ctx: HomeCtx, dt: number): void {
     if (id === 'warm' && !home.fireOn) { home.fireOn = true; fireAcc = 0; ctx.emit({ type: 'progress' }); }
     b.actionTimer = Math.max(0.05, actionDef(id).seconds);
     ctx.emit({ type: 'sfx', name: ACTION_SFX[id] });
+    if (id === 'call_mom') {
+      // Mom talks while Mocha is on the phone (and a chapter about calling wraps up during the call, not after)
+      const line = MOM_LINES[Math.max(0, ctx.progress.day) % MOM_LINES.length];
+      ctx.emit({ type: 'toast', text: `Mom: “${line}”` });
+      progressEvent(ctx.prog, { kind: 'call' });
+    }
     return;
   }
   b.actionTimer -= dt;

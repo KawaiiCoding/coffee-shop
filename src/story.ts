@@ -22,10 +22,8 @@ export const STORIES: Record<StoryId, StoryPanel[]> = {
     { art: 'shop_ready', speaker: 'Button', text: 'It sparkles! Let\'s open the door!' },
   ],
   payday: [
-    { art: 'payday', speaker: 'Button', text: 'Great job! Here\'s your pay.' },
-    { art: 'payday', speaker: 'Button', text: 'Tips are for the café: tables, treats, decor.' },
-    { art: 'payday', speaker: 'Button', text: 'Your pay is all yours: food, home and dreams!' },
-    { art: 'payday', text: 'His very first pay!' },
+    { art: 'payday', speaker: 'Button', text: 'Great job! Here\'s your very first pay.' },
+    { art: 'payday', speaker: 'Button', text: 'Tips buy café things. Pay is all yours!' },
   ],
   home_intro: [
     { art: 'home_evening', text: 'Home sweet home. Small, but his.' },
@@ -33,6 +31,7 @@ export const STORIES: Record<StoryId, StoryPanel[]> = {
   ],
   dream: [
     { art: 'dream_bike', text: 'Coin by coin... a shiny bicycle!' },
+    { art: 'dream_bike', speaker: 'Mocha', text: 'Over the hills to Mom\'s house. Wheee!' },
     { art: 'dream_mom', speaker: 'Mom', text: 'My little Mocha! I\'m so proud of you.' },
   ],
   /* ---------- v3 chapter stories ---------- */
@@ -41,8 +40,8 @@ export const STORIES: Record<StoryId, StoryPanel[]> = {
     { art: 'phone_gift', speaker: 'Mocha', text: 'Now I can call Mom! Thank you!' },
   ],
   first_call: [
-    { art: 'phone_gift', speaker: 'Mom', text: 'Mocha? Is that you, sweetie?' },
-    { art: 'dream_mom', speaker: 'Mom', text: 'A café job! I\'m so proud of you.' },
+    { art: 'mom_call', speaker: 'Mom', text: 'Mocha? Is that you, sweetie?' },
+    { art: 'mom_call', speaker: 'Mom', text: 'A café job! I\'m so proud of you.' },
   ],
   konbini_open: [
     { art: 'konbini_open', speaker: 'Button', text: 'Hoshi Mart just opened down the street!' },

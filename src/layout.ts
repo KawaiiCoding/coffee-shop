@@ -112,7 +112,7 @@ export const FURNITURE_SPOTS: Record<FurnitureId, { x: number; y: number }> = {
   radio:        { x: 344, y: 476 },  // small stand on the right, between the phone and the bookshelf
 };
 /** Mocha lying in bed (pose 'lie'): body centre on the mattress; the blanket is drawn over him. */
-export const BED_LIE = { x: 104, y: 424 };
+export const BED_LIE = { x: 101, y: 411 }; // head lands on the pillow, face clear of the blanket
 /** Home decor anchors (same conventions as DECOR_ANCHOR). */
 export const HOME_ANCHOR: Record<HomeSlot, { x: number; y: number }> = {
   window: { x: 160, y: 108 }, // centre of the window (window ~100 x 90); curtains frame it, max 150 x 120

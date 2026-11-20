@@ -21,7 +21,7 @@ import * as konbini from './konbini';
 import type { KonbiniCtx } from './konbini';
 import * as prog from './progression';
 import type { ProgCtx, ProgEvent } from './progression';
-import { calendarInfo } from './calendar';
+import { calendarInfo, worldDate } from './calendar';
 import * as secrets from './secrets';
 import { getIssue, markIssueRead } from './news';
 import { SECRETS } from '../content/secrets';
@@ -44,7 +44,7 @@ export interface GuestInt extends Guest {
 export interface GameOptions {
   rng?: () => number;        // seeded RNG for tests
   now?: () => Date;          // clock for theme 'auto'
-  dayLength?: number;        // seconds, default 120
+  dayLength?: number;        // seconds, default 60
 }
 
 export const WAITER_SPEED = 150;
@@ -57,7 +57,7 @@ const MACHINE_FACTOR = [1, 0.8, 0.65, 0.5];
 const QUEUE_MAX = 5;
 const DOOR_QUEUE_MAX = DOOR_QUEUE.length;
 /** Slow first days: index = day-1. */
-const SPAWN_SLOW = [2.2, 1.7, 1.3];
+const SPAWN_SLOW = [1.3, 1.2, 1.1];
 const DRAIN_SLOW = [0.6, 0.75, 0.9];
 const MESS_HP: Record<string, number> = { dust: 2, cobweb: 2, box: 1, spill: 3 };
 const MESS_KINDS = new Set<ChoreKind>(['dust', 'cobweb', 'box', 'spill']);
@@ -142,7 +142,9 @@ const CHORE_HINT: Record<string, string> = {
 
 export function createGame(storage: Storage | null, opts: GameOptions = {}): GameApi {
   const rng = opts.rng ?? Math.random;
-  const now = opts.now ?? (() => new Date());
+  let progress = loadProgress(storage);
+  // Yarn Street has its own calendar: the date follows the game day, not the real world
+  const now = opts.now ?? (() => worldDate(progress.day));
   const listeners = new Set<(e: GameEvent) => void>();
   let quiet = false; // swallow events while silently draining old state (resetSave)
   const emit = (e: GameEvent) => {
@@ -152,7 +154,6 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
   const sfx = (name: SfxName) => emit({ type: 'sfx', name });
   const toast = (text: string) => emit({ type: 'toast', text });
 
-  let progress = loadProgress(storage);
   let nextGuestId = 1;
   let nextEffectId = 1;
   let nextChoreId = 1;
@@ -188,7 +189,7 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     progress,
     theme: resolveTheme(progress.theme, now()),
     dayTime: 0,
-    dayLength: opts.dayLength ?? 120,
+    dayLength: opts.dayLength ?? 60,
     doorOpen: false,
     guests: [],
     waiter: newWaiter(),
@@ -218,7 +219,7 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
   const difficulty = () => Math.min(1.8, 1 + 0.05 * (progress.day - 1));
   const drainMul = () => difficulty() * (1 - 0.12 * level('cushions')) * (DRAIN_SLOW[slowIdx()] ?? 1);
   const spawnGap = () => {
-    const base = 7 + rng() * 3;
+    const base = 5.5 + rng() * 2.5; // a day is one minute: guests come a little quicker
     const dayMul = Math.max(0.65, 1 - 0.03 * (progress.day - 1));
     return ((base * dayMul) / (1 + charm() * 0.02)) * (SPAWN_SLOW[slowIdx()] ?? 1);
   };
@@ -842,8 +843,46 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
   function computeHint(): GameState['hint'] {
     if (state.mode !== 'playing') return null;
     if (state.tutorial.active) return tutorialHint();
-    // after the first-customer tutorial the café has no hint pill / tap marker
+    return coachHint();
+  }
+
+  /** The first few days: a gentle "what now?" when something has been waiting a moment (Hints setting on). */
+  function coachHint(): GameState['hint'] {
+    if (!progress.settings.hints || state.dayStats.day > 3) return null;
+    if (waiterBusy()) return null;
+    const gs = guests();
+    const w = state.waiter;
+    const serve = gs.find((g) => g.phase === 'waiting' && g.table != null && !!g.order && w.tray.includes(g.order));
+    if (serve) return { text: 'Tap the table to serve the order', target: tablePoint(serve.table!) };
+    if (neededFromCounter().length && w.tray.length < trayCap()) return { text: 'Order ready! Tap the counter to pick it up', target: { ...COUNTER_TAP } };
+    const ord = gs.find((g) => g.phase === 'ordering' && g.table != null && g.timer > 2.5);
+    if (ord) return { text: 'Tap the table to take the order', target: tablePoint(ord.table!) };
+    const front = frontGuest();
+    const free = state.tables.find(tableFree);
+    if (front && front.phase === 'door' && free && (front.timer > 2.5 || state.selectedGuest === front.id)) {
+      if (state.selectedGuest === front.id) return { text: 'Now tap a free table', target: tablePoint(free.index) };
+      return { text: 'A guest! Tap them, then a free table', target: { x: front.x, y: front.y - 40 } };
+    }
+    const tip = state.tables.find((t) => t.coins > 0 && t.guestId == null);
+    if (tip) return { text: 'Tap the coins to collect the tip', target: tablePoint(tip.index) };
     return null;
+  }
+
+  /** At home (first week, Hints on): one short line about what is worth doing right now. */
+  function homeHint(): GameState['hint'] {
+    if (!progress.settings.hints || progress.day > 8) return null;
+    const h = progress.home;
+    if (state.homeBear.action !== null || state.homeBear.path.length) return null;
+    const can = (id: HomeActionId) => home.canDoHomeAction(ctx, id).ok;
+    const say = (text: string): GameState['hint'] => ({ text, target: null });
+    if (h.meal) return say('Dinner is ready! Tap Eat');
+    if (h.energy < 45 && can('bath')) return say('Tired paws? A warm bath gives energy');
+    if (can('call_mom')) return say('Call Mom: it makes Mocha very happy');
+    if (h.energy < 75 && can('cook')) return say('Hungry? Tap Cook (or Eat for a snack)');
+    if (progress.konbiniOpen && Object.keys(h.pantry).length === 0) return say('The pantry is empty. Tap Shop to visit Hoshi Mart');
+    if (can('save') && h.wallet >= 20) return say('Drop some pay in the jar for your dream (Save)');
+    if (can('read')) return say('A quiet read in the armchair?');
+    return say('All done? Tap Sleep to start the next day');
   }
   /* ---------- story ---------- */
   /** Where to go back to after a story that has no fixed follow-up (chapter stories etc.). */
@@ -851,6 +890,12 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
   /** Stories asked for while busy (café day running, popup open, another story): played at the next calm moment. */
   let pendingStories: StoryId[] = [];
   const CALM_MODES = new Set<GameState['mode']>(['dayEnd', 'home', 'konbini']);
+  /** Pacing: seconds of calm since the last story / popup / open menu, and a rest after each story,
+   *  so pictures and cards never come back to back. */
+  let quietFor = 0;
+  let storyRest = 0;
+  const CHAPTER_QUIET = 1.2;
+  const STORY_REST = 6;
   const storyExists = (id: StoryId) => Array.isArray(STORIES[id]) && STORIES[id].length > 0;
 
   /** Play a story now if nothing else is going on, else queue it. */
@@ -905,8 +950,24 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
         if (state.scene !== scene) setScene(scene);
       }
     }
+    storyRest = STORY_REST;
+    quietFor = 0;
+    // a finished chapter's "complete" card follows its story
+    try { prog.storyFinished(pctx, st.id); } catch (err) { console.error(err); }
     emit({ type: 'progress' });
-    flushStories();
+    if (!state.popup) flushStories();
+  }
+
+  /** At a calm moment at home / in the shop, wrap up a chapter whose goal is met (story, then its card). */
+  function chapterTick(dt: number) {
+    if (state.mode === 'story' || state.popup || state.uiBusy) { quietFor = 0; return; }
+    quietFor += dt;
+    if (storyRest > 0) { storyRest -= dt; return; }
+    if (quietFor < CHAPTER_QUIET) return;
+    if (state.mode !== 'home' && state.mode !== 'konbini') return;
+    if (state.mode === 'home' && (state.homeBear.action !== null)) return;
+    if (pendingStories.length) { flushStories(); return; }
+    try { if (prog.chapterReady(progress)) prog.tryChapter(pctx); } catch (err) { console.error(err); }
   }
 
   /* ---------- day cycle ---------- */
@@ -965,6 +1026,11 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     s.stars = computeStars(s.served, s.lost);
     s.salary = home.salaryFor(s.served, s.stars, s.day);
     progress.home.wallet += s.salary;
+    // until Hoshi Mart opens, Button packs a little something so Mocha always has a bite at home
+    if (!progress.konbiniOpen && s.served > 0) {
+      s.treat = 'melon_bread';
+      progress.home.pantry.melon_bread = (progress.home.pantry.melon_bread ?? 0) + 1;
+    }
     state.lastDay = { ...s };
     state.mode = 'dayEnd';
     state.doorOpen = false;
@@ -981,11 +1047,11 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     if (progress.home.wallet >= 300) secretEv('rich_wallet');
     sfx('dayEnd');
     emit({ type: 'dayEnd', stats: { ...s } });
-    if (!progress.storySeen.includes('payday')) playStory('payday');
-    // chapter stories from today wait behind the payday story (or play now)
     progEvent({ kind: 'dayEnd' });
-    takeDeferredStories();
-    flushStories();
+    // one thing at a time: the first payday, or else a chapter finished today (its story, then its card).
+    // Anything more waits for a calm moment at home.
+    if (!progress.storySeen.includes('payday')) playStory('payday');
+    else { try { prog.tryChapter(pctx); } catch (err) { console.error(err); } }
     emit({ type: 'progress' });
   }
 
@@ -995,8 +1061,14 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     for (const e of state.effects) e.age += dt;
     state.effects = state.effects.filter((e) => e.age < e.life);
     try { secrets.updateSecrets(ctx, dt); } catch (err) { console.error(err); }
+    chapterTick(dt);
     // (home.updateHome runs updateProgression itself)
-    if (state.mode === 'home') { home.updateHome(ctx, dt); return; }
+    if (state.mode === 'home') {
+      if (state.popup) return; // a card is up: the evening waits
+      home.updateHome(ctx, dt);
+      if (state.mode === 'home') state.hint = homeHint();
+      return;
+    }
     try { prog.updateProgression(pctx, dt); } catch (err) { console.error(err); }
     if (state.mode === 'konbini') { konbini.updateKonbini(kctx, dt); return; }
     if (state.mode === 'cleanup') {
@@ -1005,6 +1077,8 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
       return;
     }
     if (state.mode !== 'playing') return;
+    // a gift card is up: the café holds its breath (nobody loses patience while you read it)
+    if (state.popup) return;
 
     if (!state.tutorial.active) state.dayTime += dt; // the clock waits while learning
     if (state.doorOpen && state.dayTime >= state.dayLength) {
@@ -1097,6 +1171,7 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     state.konbini = { basket: [], bear: home.newHomeBear() };
     storyReturn = null;
     pendingStories = [];
+    prog.resetQueues();
     setScene('cafe');
   }
 
@@ -1109,6 +1184,7 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
       state.shootingStar = null;
       state.konbini = { basket: [], bear: home.newHomeBear() };
       state.mode = 'konbini';
+      state.hint = null;
       getIssue(progress, state.calendar); // today's Gazette sale applies to prices
       konbini.enterKonbini(kctx);
       setScene('konbini');
@@ -1124,26 +1200,15 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
     sfx('door');
     checkSeason();
     emit({ type: 'progress' });
-    flushStories();
   }
 
   /* ---------- popups ---------- */
   function dismissPopup() {
     if (!state.popup) return;
     state.popup = null;
-    // shows the next waiting popup, or plays a finished chapter's story (via pctx.playStory → requestStory)
-    try { prog.nextPopup(pctx); } catch (err) { console.error(err); }
-    if (!state.popup) flushStories();
+    quietFor = 0;
+    try { prog.nextPopup(pctx); } catch (err) { console.error(err); } // the next waiting card, if any
     emit({ type: 'progress' });
-  }
-
-  /** Chapter stories progression deferred while the café day was running. */
-  function takeDeferredStories() {
-    for (let i = 0; i < 10; i++) {
-      const id = prog.takeQueuedStory();
-      if (!id) break;
-      requestStory(id);
-    }
   }
 
   /* ---------- cooking / fire (home.ts) ---------- */
@@ -1153,18 +1218,8 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
   }
 
   function resetSave() {
-    // drop popups / stories progression still has waiting for the old save
-    quiet = true;
-    for (let i = 0; i < 50 && (state.popup || i === 0); i++) {
-      state.popup = null;
-      const mode = state.mode;
-      state.mode = 'playing'; // keeps nextPopup from playing a story
-      try { prog.nextPopup(pctx); } catch { /* ignore */ }
-      state.mode = mode;
-    }
+    prog.resetQueues();
     state.popup = null;
-    for (let i = 0; i < 50 && prog.takeQueuedStory(); i++) { /* drain */ }
-    quiet = false;
     pendingStories = [];
     clearProgress(storage);
     progress = defaultProgress();
@@ -1225,9 +1280,8 @@ export function createGame(storage: Storage | null, opts: GameOptions = {}): Gam
       // (home.enterHome sends the 'enterHome' progress event; stories it triggers wait behind home_intro)
       home.enterHome(ctx);
       checkSeason();
-      takeDeferredStories();
+      state.hint = null;
       emit({ type: 'progress' });
-      flushStories();
     },
     homeAction: (id: HomeActionId) => home.homeAction(ctx, id),
     buyHomeItem: (id: HomeItemId) => home.buyHomeItem(ctx, id),

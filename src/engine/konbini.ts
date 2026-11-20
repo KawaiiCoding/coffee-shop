@@ -271,7 +271,7 @@ export function enterKonbini(ctx: KonbiniCtx): void {
   anim.walking = 'free';
   walkTo(b, { x: KONBINI_ENTER.x + 52, y: KONBINI_ENTER.y + 26 }); // a couple of steps inside
   anim.greet = 2.5;
-  say('いらっしゃいませ！', 2.5, false);
+  say('Welcome!', 2.5, false);
   shoppers = [];
   spawnTimer = 2.5 + Math.random() * 2.5; // the first other shopper wanders in a little later
   ctx.emit({ type: 'sfx', name: 'chime' });
@@ -365,7 +365,7 @@ function updateShoppers(ctx: KonbiniCtx, dt: number) {
       case 'in':
         n.timer -= dt;
         n.alpha = clamp(1 - n.timer / NPC_FADE, 0, 1);
-        if (!n.greeted && n.alpha > 0.5) { say('いらっしゃいませ♪', 1.6, true); n.greeted = true; }
+        if (!n.greeted && n.alpha > 0.5) { say('Welcome♪', 1.6, true); n.greeted = true; }
         if (n.timer <= 0) { n.alpha = 1; nextErrand(ctx, n); }
         break;
       case 'walk':
@@ -389,7 +389,7 @@ function updateShoppers(ctx: KonbiniCtx, dt: number) {
           }
         } else {
           n.timer -= dt;
-          if (n.timer <= 0) { say('ありがとうございました♪', 1.6, true); n.basket = false; nextErrand(ctx, n); }
+          if (n.timer <= 0) { say('Thank you♪', 1.6, true); n.basket = false; nextErrand(ctx, n); }
         }
         break;
       case 'leave':
@@ -532,7 +532,7 @@ function pay(ctx: KonbiniCtx) {
     addEffect(state, 'text', fx - 14, fy - 18, `+${joy} ♥`);
   }
   anim.thanks = 2.5;
-  say('ありがとうございました！', 2.5, false);
+  say('Thank you!', 2.5, false);
   ctx.emit({ type: 'sfx', name: 'arigato' });
   // (the clerk's ありがとうございました bubble thanks the player; no toast)
 
@@ -564,12 +564,9 @@ export function konbiniTap(ctx: KonbiniCtx, x: number, y: number): void {
   });
   const clerkD = Math.hypot(x - CLERK_TAP.x, y - CLERK_TAP.y);
   if (best >= 0 && clerkD >= bestD) {
-    // walk to the tapped slot itself (not just the nearest one with that product)
-    const id = layout[best]!;
-    if (basketCount(ctx) + anim.queue.length >= MAX_BASKET) { konbiniTake(ctx, id); return; }
-    anim.queue.push({ slot: best, id });
+    // show the product big (name, price, what it is for); the card's button adds it to the basket
     ctx.emit({ type: 'sfx', name: 'tap' });
-    if (!busy()) startNext(ctx);
+    ctx.emit({ type: 'konbiniPick', id: layout[best]! });
     return;
   }
   // nothing to pay for: a tap on the clerk / counter can be a journal hotspot instead

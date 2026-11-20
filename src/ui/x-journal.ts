@@ -10,7 +10,7 @@ import { journalCoverSvg, lockedStickerSvg, stickerSvg } from '../art';
 import type { AudioApi, GameApi, SecretDef, SfxName } from '../types';
 import { esc, firstIcon, icon, pulseClass, reducedMotion } from './util';
 
-export interface JournalUI { open(): void; frame(): void }
+export interface JournalUI { /** Opens straight on the pages (on `pageId`'s page when given, else the first new one). */ open(pageId?: string): void; frame(): void }
 
 type Entry = { def: SecretDef; found: boolean; foundIndex: number };
 
@@ -60,7 +60,7 @@ export function mountJournal(layer: HTMLElement, game: GameApi, audio: AudioApi)
   /** Day a page was found on (only known for pages found while the game was running). */
   const days = loadJson<Record<string, number>>(DAYS_KEY, {});
 
-  function entries(): Entry[] {
+  function rawEntries(): Entry[] {
     try {
       const j = game.journal();
       if (Array.isArray(j) && j.length) return j;
@@ -70,6 +70,12 @@ export function mountJournal(layer: HTMLElement, game: GameApi, audio: AudioApi)
       const i = found.indexOf(def.id);
       return { def, found: i >= 0, foundIndex: i };
     });
+  }
+  /** Written pages first (in the order Mocha found them), then the empty ones: the book fills from the front. */
+  function entries(): Entry[] {
+    const all = rawEntries();
+    const found = all.filter((e) => e.found).sort((a, b) => a.foundIndex - b.foundIndex);
+    return [...found, ...all.filter((e) => !e.found)];
   }
 
   const isNew = (e: Entry) => e.found && !seen.has(e.def.id);
@@ -213,11 +219,17 @@ export function mountJournal(layer: HTMLElement, game: GameApi, audio: AudioApi)
     flipping = window.setTimeout(() => { flipping = 0; show(true); }, 560);
   }
 
-  function openJournal(): void {
-    if (isOpen) return;
+  function openJournal(pageId?: string): void {
+    const list = entries();
+    // straight to the pages: the asked page, else the first new one, else the last written page
+    let idx = pageId ? list.findIndex((e) => e.def.id === pageId) : -1;
+    if (idx < 0) idx = list.findIndex(isNew);
+    if (idx < 0) idx = Math.max(0, list.filter((e) => e.found).length - 1);
+    const target = Math.floor(idx / 2) + 1;
+    if (isOpen) { if (flipping) { window.clearTimeout(flipping); flipping = 0; } view = target; show(); return; }
     opener = document.activeElement as HTMLElement | null;
     isOpen = true;
-    view = 0;
+    view = target;
     jLayer.hidden = false;
     show();
     pulseClass(sheet, 'in');
@@ -326,12 +338,12 @@ export function mountJournal(layer: HTMLElement, game: GameApi, audio: AudioApi)
       lastMode = s.mode;
       titleBtn.hidden = s.mode !== 'title';
       if (!titleBtn.hidden) syncDot();
-      if (isOpen && s.mode !== 'title' && s.mode !== 'home' && s.mode !== 'konbini' && s.mode !== 'paused') closeJournal();
+      if (isOpen && s.mode !== 'title' && s.mode !== 'home' && s.mode !== 'konbini' && s.mode !== 'paused' && s.mode !== 'dayEnd') closeJournal();
     }
     if (isOpen && !flipping && stateKey() !== renderedKey) show(true);
   }
 
   frame();
 
-  return { open: openJournal, frame };
+  return { open: (pageId?: string) => openJournal(pageId), frame };
 }

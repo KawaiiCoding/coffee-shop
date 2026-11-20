@@ -3,10 +3,8 @@
    game.ts / home.ts / konbini.ts call these.
 
    Popups: only one is shown at a time (state.popup). Others wait in a pending queue.
-   game.ts dismissPopup() should: `state.popup = null; nextPopup(ctx);`
-   nextPopup shows the next waiting popup; when none is left, a story queued by a finished
-   chapter is played via ctx.playStory (unless a café day is running — then it stays queued
-   and game.ts can fetch it with takeQueuedStory(), e.g. at day end / going home).
+   Chapters wrap up one at a time and only at a calm moment (tryChapter): the chapter's story
+   plays first, then its "chapter complete" card (storyFinished). Nothing interrupts a café day.
    ===================================================================== */
 import type {
   DecorSlot, GameEvent, GameState, GoalCheck, Popup, Progress, RegularId, Reward, Stats, StoryId,
@@ -15,7 +13,7 @@ import { CHAPTERS, ECONOMY, REGULARS, SEASON_EVENTS } from '../content/progressi
 import { HOME_WINDOW } from '../art/home-room';
 import { HOME_ITEMS } from './home';
 import { decorDef } from './catalog';
-import { calendarInfo, daysUntil } from './calendar';
+import { calendarInfo, daysUntil, DAYS_PER_GAME_DAY, worldDate } from './calendar';
 
 export interface ProgCtx {
   state: GameState; progress: Progress;
@@ -28,12 +26,10 @@ export type ProgEvent =
   | { kind: 'dream' } | { kind: 'homeItem' } | { kind: 'wish' } | { kind: 'enterHome' };
 
 /* ---------- module state ---------- */
-interface PendingPopup { popup: Popup; story?: StoryId }
 let ownerState: GameState | null = null;
-let pending: PendingPopup[] = [];
-/** Story attached to the popup currently on screen (queued when it is dismissed). */
-let shownStory: StoryId | null = null;
-const storyQueue: StoryId[] = [];
+let pending: Popup[] = [];
+/** "Chapter complete" cards waiting for their story to finish (story first, then the reward card). */
+let afterStory = new Map<StoryId, Popup>();
 const recentRegulars: RegularId[] = [];
 const STAR_SECONDS = 2.2;
 
@@ -42,8 +38,14 @@ function own(ctx: ProgCtx) {
   if (ownerState !== ctx.state) {
     ownerState = ctx.state;
     pending = [];
-    shownStory = null;
+    afterStory = new Map();
   }
+}
+
+/** Forget every waiting popup / chapter card (reset, back to title). */
+export function resetQueues(): void {
+  pending = [];
+  afterStory = new Map();
 }
 
 function ensure(p: Progress) {
@@ -72,40 +74,36 @@ function popupSfx(p: Popup): 'gift' | 'unlock' | 'wish' | 'chime' {
   }
 }
 
-function display(ctx: ProgCtx, item: PendingPopup) {
-  ctx.state.popup = item.popup;
-  shownStory = item.story ?? null;
+function display(ctx: ProgCtx, popup: Popup) {
+  ctx.state.popup = popup;
   ctx.emit({ type: 'popup' });
-  ctx.emit({ type: 'sfx', name: popupSfx(item.popup) });
+  ctx.emit({ type: 'sfx', name: popupSfx(popup) });
 }
 
-function showPopup(ctx: ProgCtx, popup: Popup, story?: StoryId) {
+function showPopup(ctx: ProgCtx, popup: Popup) {
   own(ctx);
-  const item: PendingPopup = story ? { popup, story } : { popup };
-  if (ctx.state.popup) pending.push(item);
-  else display(ctx, item);
+  if (ctx.state.popup) pending.push(popup);
+  else display(ctx, popup);
 }
 
-/** Queue a popup behind any popup already showing (used by the secrets engine). */
+/** Queue a popup behind any popup already showing. */
 export function queuePopup(ctx: ProgCtx, popup: Popup): void { showPopup(ctx, popup); }
 
-/** Called by game.ts from dismissPopup (after or instead of clearing state.popup): shows the next waiting popup. */
+/** Called by game.ts from dismissPopup: shows the next waiting popup, if any. */
 export function nextPopup(ctx: ProgCtx): void {
   own(ctx);
   ctx.state.popup = null;
-  if (shownStory) { storyQueue.push(shownStory); shownStory = null; }
   const next = pending.shift();
-  if (next) { display(ctx, next); return; }
-  const mode = ctx.state.mode;
-  if (storyQueue.length && mode !== 'playing' && mode !== 'paused' && mode !== 'story') {
-    const id = storyQueue.shift()!;
-    ctx.playStory(id);
-  }
+  if (next) display(ctx, next);
 }
 
-/** A chapter story waiting to be played (popup already dismissed). game.ts plays it when convenient. */
-export function takeQueuedStory(): StoryId | null {
-  return storyQueue.shift() ?? null;
+/** Called by game.ts when a story ends: a finished chapter's reward card follows its story. */
+export function storyFinished(ctx: ProgCtx, id: StoryId): void {
+  own(ctx);
+  const popup = afterStory.get(id);
+  if (!popup) return;
+  afterStory.delete(id);
+  showPopup(ctx, popup);
 }
 
 /* ---------- rewards ---------- */
@@ -204,28 +202,50 @@ function goalMet(p: Progress, c: GoalCheck): boolean {
   return goalProgress(p, c) >= 1;
 }
 
-function checkChapters(ctx: ProgCtx) {
-  const p = ctx.progress;
-  let guard = 0;
-  while (p.chapter < CHAPTERS.length && guard++ < CHAPTERS.length) {
-    const ch = CHAPTERS[p.chapter];
-    if (!goalMet(p, ch.check)) break;
-    grantAll(ctx, ch.rewards);
-    let text = `Goal done: ${ch.goal}.`;
-    if (ch.unlocks?.konbini && !p.konbiniOpen) {
-      p.konbiniOpen = true;
-      text += ' The konbini down the street is now open!';
-    }
-    p.chapter += 1;
-    const nxt = CHAPTERS[p.chapter];
-    if (nxt) text += ` Next: ${nxt.goal}`;
-    ctx.emit({ type: 'progress' });
-    ctx.save();
-    showPopup(ctx, { kind: 'chapter', title: ch.title, text, rewards: ch.rewards }, ch.story);
-  }
+/** Is the current chapter's goal met (so it can be wrapped up at the next calm moment)? */
+export function chapterReady(p: Progress): boolean {
+  ensure(p);
+  const ch = CHAPTERS[p.chapter];
+  return !!ch && goalMet(p, ch.check);
 }
 
-/** Record an event: updates stats/friendship, checks the current chapter goal, grants gifts (sets state.popup). */
+const CALM = new Set<GameState['mode']>(['home', 'konbini', 'dayEnd']);
+
+/** Wrap up the current chapter if its goal is met and nothing else is on screen: rewards, then its story,
+ *  then the "chapter complete" card. One chapter at a time; returns true when one was completed. */
+export function tryChapter(ctx: ProgCtx): boolean {
+  own(ctx);
+  const p = ctx.progress;
+  const st = ctx.state;
+  if (!CALM.has(st.mode) || st.popup || st.story) return false;
+  if (!chapterReady(p)) return false;
+  const ch = CHAPTERS[p.chapter];
+  grantAll(ctx, ch.rewards);
+  let text = ch.done ?? `Goal done: ${ch.goal}.`;
+  if (ch.unlocks?.konbini && !p.konbiniOpen) {
+    p.konbiniOpen = true;
+    text += ' Hoshi Mart, the corner shop, is now open!';
+  }
+  p.chapter += 1;
+  const nxt = CHAPTERS[p.chapter];
+  const popup: Popup = { kind: 'chapter', title: ch.title, text, rewards: ch.rewards, chapter: ch.id };
+  if (nxt) popup.next = nxt.goal;
+  if (ch.check.kind === 'dream' || (ch.check.kind === 'furniture' && ch.check.id === 'fireplace')) popup.dream = true;
+  ctx.emit({ type: 'progress' });
+  ctx.save();
+  if (ch.story) {
+    afterStory.set(ch.story, popup);
+    ctx.playStory(ch.story);
+    // the story could not start (unknown id): don't lose the card
+    if (ctx.state.mode !== 'story' && afterStory.get(ch.story) === popup) { afterStory.delete(ch.story); showPopup(ctx, popup); }
+  } else showPopup(ctx, popup);
+  return true;
+}
+
+/** Things Mocha does himself at home / in the shop: their chapter wraps up right away, while it is happening. */
+const INSTANT = new Set<ProgEvent['kind']>(['call', 'cooked', 'konbini', 'saved', 'dream', 'homeItem', 'wish']);
+
+/** Record an event: updates stats/friendship and grants gifts (sets state.popup). */
 export function progressEvent(ctx: ProgCtx, ev: ProgEvent): void {
   own(ctx);
   const p = ctx.progress;
@@ -250,7 +270,7 @@ export function progressEvent(ctx: ProgCtx, ev: ProgEvent): void {
     case 'wish': s.wishes += 1; break;
     default: break;
   }
-  checkChapters(ctx);
+  if (INSTANT.has(ev.kind)) tryChapter(ctx);
   ctx.save();
 }
 
@@ -328,13 +348,13 @@ export function checkSeasonEvents(ctx: ProgCtx): void {
   own(ctx);
   const p = ctx.progress;
   ensure(p);
-  const now = new Date();
+  const now = worldDate(p.day);
   const cal = calendarInfo(now);
   ctx.state.calendar = cal;
   let changed = false;
   for (const ev of SEASON_EVENTS) {
     const { daysLeft, year } = daysUntil(ev, now);
-    if (daysLeft === 0) {
+    if (daysLeft < DAYS_PER_GAME_DAY) {
       const key = `event:${ev.id}:${year}`;
       if (p.giftsReceived.includes(key)) continue;
       p.giftsReceived.push(key);
@@ -342,14 +362,8 @@ export function checkSeasonEvents(ctx: ProgCtx): void {
       const rewards = ev.gift ? [ev.gift] : [];
       grantAll(ctx, rewards);
       showPopup(ctx, { kind: 'festival', title: `Happy ${ev.name}!`, text: ev.blurb, rewards });
-    } else if (daysLeft <= ev.leadDays) {
-      const key = `announce:${ev.id}:${year}`;
-      if (p.giftsReceived.includes(key)) continue;
-      p.giftsReceived.push(key);
-      changed = true;
-      const when = daysLeft === 1 ? 'tomorrow' : `in ${daysLeft} days`;
-      showPopup(ctx, { kind: 'festival', title: `${ev.name} is coming ${when}!`, text: ev.blurb, rewards: [] });
     }
+    // (no "coming soon" popup: the calendar chip and the newspaper already announce festivals)
   }
   if (changed) { ctx.emit({ type: 'progress' }); ctx.save(); }
 }

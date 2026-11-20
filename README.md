@@ -2,8 +2,9 @@
 
 A cozy, mobile-first café game. Crocheted animal guests walk in, you seat them,
 take their order, carry their latte from the counter and collect their tips.
-Spend tips on upgrades and decorations. The café redresses itself for spring,
-Christmas and Halloween.
+Spend tips on upgrades and decorations. Yarn Street has its own calendar (every
+work day hops five days), so the café redresses itself for spring, summer,
+Halloween and Christmas as you play.
 
 Runs in any modern browser. Built with Vite and TypeScript, no game framework.
 
@@ -25,7 +26,7 @@ npm run dev        # open the printed URL on your phone (same Wi-Fi) or desktop
 | The guest's table | Serves it. More patience left means a bigger tip |
 | Coins on a table | Collects the tip and frees the table |
 
-A day lasts two minutes. After it, spend coins on upgrades (more tables, faster
+A day lasts one minute. After it, spend coins on upgrades (more tables, faster
 machine, bigger tray, comfier cushions) and decorations. Decorations add charm,
 which brings guests faster and raises tips.
 

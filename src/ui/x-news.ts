@@ -35,7 +35,7 @@ export function mountNews(layer: HTMLElement, game: GameApi, audio: AudioApi): N
           <button class="ibtn" data-n="close" aria-label="Close">${icon('close')}</button>
         </div>
         <div class="xn-body"></div>
-        <div class="xn-foot"><button class="btn btn-primary" data-n="close">Fold it up</button></div>
+        <div class="xn-foot"></div>
       </div>
     </div>`;
   layer.appendChild(root);
@@ -43,6 +43,44 @@ export function mountNews(layer: HTMLElement, game: GameApi, audio: AudioApi): N
   const nLayer = root.querySelector('.xn-layer') as HTMLElement;
   const sheet = root.querySelector('.xn-sheet') as HTMLElement;
   const body = root.querySelector('.xn-body') as HTMLElement;
+  const foot = root.querySelector('.xn-foot') as HTMLElement;
+  const headH = root.querySelector('#xn-h') as HTMLElement;
+
+  /* ---------- the paper rack: every paper Mocha has read is kept and can be read again ---------- */
+  const RACK_KEY = 'coffee-shop-paper-rack';
+  const RACK_MAX = 40;
+  function loadRack(): NewsIssue[] {
+    try {
+      const raw = JSON.parse(localStorage.getItem(RACK_KEY) || '[]') as NewsIssue[];
+      const today = game.state.progress.day;
+      // papers "from the future" belong to an erased save
+      return Array.isArray(raw) ? raw.filter((n) => n && typeof n.day === 'number' && n.day <= today && n.headline) : [];
+    } catch { return []; }
+  }
+  function keep(issue: NewsIssue): void {
+    try {
+      const rack = loadRack().filter((n) => n.day !== issue.day);
+      rack.unshift(issue);
+      rack.sort((a, b) => b.day - a.day);
+      localStorage.setItem(RACK_KEY, JSON.stringify(rack.slice(0, RACK_MAX)));
+    } catch { /* storage blocked */ }
+  }
+  function rackHtml(): string {
+    const today = game.state.progress.day;
+    const rack = loadRack();
+    const rows = rack.map((n) => {
+      const wx = tryArt(() => weatherSvg(n.weather, 28));
+      return `<li><button class="xn-rack-item" data-n="issue" data-id="${esc(n.day)}">
+          <span class="xn-rack-day"><small>Day</small><b>${esc(n.day)}</b></span>
+          <span class="xn-rack-txt"><small>${esc(n.dateLabel)}${n.day === today ? ' · today' : ''}</small><b>${esc(n.headline.title)}</b></span>
+          ${wx ? `<span class="xn-wico" aria-hidden="true">${wx}</span>` : ''}
+        </button></li>`;
+    }).join('');
+    return `<div class="xn-rack">
+        <p class="xn-rack-intro">Every paper you read is kept here, newest on top.</p>
+        ${rows ? `<ul class="xn-rack-list">${rows}</ul>` : '<p class="empty">No papers yet. Read today’s first!</p>'}
+      </div>`;
+  }
 
   const sfx = (n: SfxName) => { try { audio.playSfx(n); } catch { /* ignore */ } };
 
@@ -148,14 +186,30 @@ export function mountNews(layer: HTMLElement, game: GameApi, audio: AudioApi): N
   let isOpen = false;
   let opener: HTMLElement | null = null;
 
+  /** Show one paper ('today' or an old one from the rack) or the rack itself. */
+  function show(what: 'rack' | NewsIssue, isToday = false): void {
+    const count = loadRack().length;
+    if (what === 'rack') {
+      headH.textContent = 'Paper rack';
+      body.innerHTML = rackHtml();
+      foot.innerHTML = '<button class="btn btn-soft" data-n="today">Today’s paper</button><button class="btn btn-primary" data-n="close">Close</button>';
+    } else {
+      headH.textContent = isToday ? 'Today’s paper' : `Day ${what.day} paper`;
+      body.innerHTML = paperHtml(what);
+      foot.innerHTML = `<button class="btn btn-soft" data-n="rack">Paper rack${count ? ` (${count})` : ''}</button>`
+        + '<button class="btn btn-primary" data-n="close">Fold it up</button>';
+    }
+    body.scrollTop = 0;
+  }
+
   function open(): void {
     let issue: NewsIssue | null = null;
     try { issue = game.newspaper(); } catch (err) { console.error('newspaper failed', err); }
     if (!issue) return;
     if (!isOpen) opener = document.activeElement as HTMLElement | null;
     isOpen = true;
-    body.innerHTML = paperHtml(issue);
-    body.scrollTop = 0;
+    keep(issue);
+    show(issue, true);
     nLayer.hidden = false;
     pulseClass(sheet, 'in');
     sheet.focus({ preventScroll: true });
@@ -176,7 +230,16 @@ export function mountNews(layer: HTMLElement, game: GameApi, audio: AudioApi): N
   root.addEventListener('click', (e) => {
     const t = (e.target as Element).closest<HTMLElement>('[data-n]');
     if (!t || !root.contains(t)) return;
-    if (t.dataset.n === 'close') { sfx('tap'); close(); }
+    switch (t.dataset.n) {
+      case 'close': sfx('tap'); close(); break;
+      case 'rack': sfx('page'); show('rack'); break;
+      case 'today': { sfx('page'); try { show(game.newspaper(), true); } catch { close(); } break; }
+      case 'issue': {
+        const n = loadRack().find((x) => String(x.day) === t.dataset.id);
+        if (n) { sfx('page'); show(n, n.day === game.state.progress.day); }
+        break;
+      }
+    }
   });
   root.addEventListener('pointerdown', (e) => {
     const b = (e.target as Element).closest('.btn, .ibtn');

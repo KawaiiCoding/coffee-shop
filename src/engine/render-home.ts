@@ -131,7 +131,8 @@ function bearLayer(s: GameState): Layer | null {
           breathe(t * 0.5, 0, 0.03));
         return {
           y: bed.y,
-          svg: body + at(bed.x, bed.y, art.bedBlanket(quilt, s.theme)) + at(BED_LIE.x - 4, BED_LIE.y - 26, zzz(t)),
+          // the blanket is tucked up to his chin (pulled in a little from the pillow side so the whole face shows)
+          svg: body + at(bed.x, bed.y, art.bedBlanket(quilt, s.theme), 'translate(77 0) scale(.86 1) translate(-77 0)') + at(BED_LIE.x - 30, BED_LIE.y - 30, zzz(t)),
         };
       }
       case 'read': {
@@ -241,6 +242,8 @@ export function homeDynamic(s: GameState): string {
   }
   const bear = bearLayer(s);
   if (bear) sorted.push(bear);
+  // the dream bicycle, proudly parked in the room once it is his
+  if (home.dreamDone) sorted.push({ y: 586, svg: at(174, 572, art.dreamBike()) });
   const corner = home.placed.corner;
   if (corner) {
     const a = HOME_ANCHOR.corner;

@@ -50,8 +50,20 @@ const inkTxt = (x: number, y: number, s: string, size: number, fill: string, sw 
   txt(x, y, s, size, fill, ` stroke="${INK}" stroke-width="${sw}" stroke-linejoin="round" paint-order="stroke"`);
 /** Japanese labels: soft rounded gothic. */
 const JFONT = "'Baloo 2', 'Hiragino Maru Gothic ProN', 'Yu Gothic', sans-serif";
-const jtxt = (x: number, y: number, s: string, size: number, fill: string, extra = '') =>
-  `<text x="${x}" y="${y}" text-anchor="middle" font-family="${JFONT}" font-size="${size}" font-weight="800" fill="${fill}"${extra}>${s}</text>`;
+/** The shop's signs in English (the art was first lettered in Japanese). */
+const SIGN_EN: Record<string, string> = {
+  '自動ドア': 'AUTO', 'いらっしゃいませ': 'WELCOME!', '時': 'HR', '間': '♥', 'エコ': 'ECO',
+  '★ おやつ・パン ★': '★ SNACKS & BREAD ★', '特価': 'SALE', '人気': 'HOT!', 'ドリンク': 'DRINKS', '新発売!': 'JUST IN!',
+  'おにぎり': 'ONIGIRI', 'ホット': 'HOT', '冷たい': 'COLD', '雑誌': 'BOOKS', 'おすすめ': 'PICK!', 'セルフ': 'SELF',
+  'ありがとう': 'THANK YOU', 'ホット ★ 肉まん': 'HOT ★ BUNS', 'おでん': 'ODEN', 'ほし': 'HOSHI', 'ホシ': 'HOSHI',
+};
+const jtxt = (x: number, y: number, s0: string, size0: number, fill: string, extra = '') => {
+  const en = SIGN_EN[s0];
+  const s = en ?? s0;
+  // Latin letters are narrower than kana: shrink only when the English word would be wider than the original
+  const size = en ? +(size0 * Math.min(1, (s0.length * 1.02) / (en.length * 0.64))).toFixed(2) : size0;
+  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="${JFONT}" font-size="${size}" font-weight="800" fill="${fill}"${extra}>${s}</text>`;
+};
 const jink = (x: number, y: number, s: string, size: number, fill: string, sw = 2.4) =>
   jtxt(x, y, s, size, fill, ` stroke="${INK}" stroke-width="${sw}" stroke-linejoin="round" paint-order="stroke"`);
 /** Puffy scalloped "burst" sign outline. */

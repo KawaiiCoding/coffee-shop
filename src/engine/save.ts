@@ -16,7 +16,7 @@ export const SAVE_KEY_V1 = 'coffee-shop-save-v1';
 const storyIds = () => Object.keys(STORIES) as StoryId[];
 
 export const DEFAULT_SETTINGS: Settings = {
-  music: true, sfx: true, musicVolume: 0.6, sfxVolume: 0.8, hints: false,
+  music: true, sfx: true, musicVolume: 0.6, sfxVolume: 0.8, hints: true,
 };
 
 const SLOTS: DecorSlot[] = ['ceiling', 'wall', 'back', 'corner', 'rug'];
@@ -93,7 +93,7 @@ export function defaultProgress(): Progress {
     recipes: startRecipes(),
     stats: emptyStats(),
     secrets: [],
-    secretCounters: {},
+    secretCounters: { _hints7: 1 },
     newsReadDay: 0,
     newsSeen: [],
     storySeen: [],
@@ -194,6 +194,9 @@ export function sanitizeProgress(raw: unknown): Progress {
       if (k.length > 0 && k.length < 80 && typeof v === 'number' && Number.isFinite(v)) p.secretCounters[k] = Math.max(0, Math.floor(v));
     }
   }
+  // v7: hints used to be off by default; they are now short, timed help, so older saves get them switched on once
+  if (!isObj(r.secretCounters) || !(r.secretCounters as Record<string, unknown>)._hints7) p.settings.hints = true;
+  p.secretCounters._hints7 = 1;
   p.newsReadDay = int(r.newsReadDay, 0, 0);
   if (Array.isArray(r.newsSeen)) p.newsSeen = r.newsSeen.filter(shortStr).slice(-200);
   return p;

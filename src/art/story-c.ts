@@ -659,6 +659,30 @@ function newDream(): string {
   return s;
 }
 
+/* --- On the phone with Mom (evening at home, Mom in a round "voice" bubble) --- */
+function momCall(): string {
+  let s = bg('#cdc6e4');
+  s += glow(86, 150, 96, '#ffe6a8', 0.28);
+  // floor + rug
+  s += sh('M-4,186 C90,184 230,187 324,185 L324,244 L-4,244z', '#b59478', 2);
+  s += faint('M0,208 C90,207 210,209 320,207 M0,228 C90,227 210,229 320,227 M70,186 L66,208 M250,186 L246,208', 1.2, 0.22);
+  s += sh(blob(92, 220, 56, 11, 0.2), '#e8b4b8', 2) + `<ellipse cx="92" cy="220" rx="42" ry="7" fill="none" stroke="#fff6ea" stroke-width="1.6" stroke-dasharray="3 3"/>`;
+  // little phone table with the pink phone base
+  s += sh(box(140, 196, 6, 34, 2, 0.4), '#b57a5e', 1.8) + sh(blob(143, 194, 22, 5, 0.2), '#d9a07a', 2)
+    + sh('M130,192 C130,182 156,182 156,192z', '#f5a9c0', 2) + `<circle cx="143" cy="188" r="3.2" fill="#fff6ea" stroke="${INK}" stroke-width="1.2"/>`;
+  // Mocha holding the receiver to his ear
+  s += g('translate(92,222) scale(1.5)', character(MOCHA_SCARF, { pose: 'stand', mood: 'happy', facing: 1, holding: 'phone' }));
+  // Mom's voice bubble
+  s += sh(blob(226, 96, 70, 66, 0.15), '#fffaf2', 2.4)
+    + sh(blob(158, 140, 9, 8, 0.2), '#fffaf2', 2) + sh(blob(144, 152, 5, 4.5, 0.2), '#fffaf2', 1.8);
+  s += `<clipPath id="mc-clip"><circle cx="226" cy="96" r="60"/></clipPath>`;
+  s += `<g clip-path="url(#mc-clip)">` + glow(226, 110, 60, '#ffe9c9', 0.6)
+    + fig(MOM, 226, 176, 1.55, 'happy', -1, { mid: shawlMarks(), front: GLASSES, armR: ARM_UP }) + '</g>';
+  s += hrt(150, 96, 0.7) + hrt(172, 70, 0.5, '#f7b6c8') + hrt(286, 40, 0.55) + hrt(40, 96, 0.5, '#f7b6c8');
+  s += spark(288, 150, 0.6) + spark(44, 60, 0.5, '#ffffff') + ln('M118,128 l8,-5 M120,138 l9,-1', 1.8, '#e58a94');
+  return s;
+}
+
 export function storyArtC(id: StoryArtId): string {
   switch (id) {
     case 'phone_gift': return phoneGift();
@@ -671,6 +695,7 @@ export function storyArtC(id: StoryArtId): string {
     case 'friends_party': return friendsParty();
     case 'festival_coming': return festivalComing();
     case 'new_dream': return newDream();
+    case 'mom_call': return momCall();
     default: return '';
   }
 }

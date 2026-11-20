@@ -7,11 +7,13 @@
 import './extras.css';
 import type { AudioApi, DishId, GameApi, GameState, KonbiniStockId, Popup, SfxName, SnackId } from '../types';
 import { burst, pulseClass, reducedMotion } from './util';
-import { calendarHtml, konbiniHtml, popupHtml, recipesHtml, type RecipeTab } from './x-views';
+import { calendarHtml, konbiniHtml, popupHtml, productCardHtml, recipesHtml, type RecipeTab } from './x-views';
 
 export interface Extras {
   frame(): void;                       // cheap per-frame sync
-  openRecipes(): void;                 // called when the player chooses Cook at home
+  openRecipes(tab?: 'recipes' | 'snacks'): void; // called when the player chooses Cook (or Eat with only snacks) at home
+  /** Called with a journal page id when the player taps a "new journal page" note. */
+  onOpenJournal?: (id: string) => void;
   openCalendar(): void;                // called when the player taps the calendar
 }
 
@@ -26,6 +28,8 @@ export function mountExtras(layer: HTMLElement, game: GameApi, audio: AudioApi):
       <div class="backdrop" data-x="close"></div>
       <div class="sheet xs-sheet" role="dialog" aria-modal="true" aria-labelledby="xs-h" tabindex="-1"></div>
     </div>
+    <div class="xi-layer" hidden></div>
+    <button class="xn-note" data-x="note" hidden></button>
     <div class="xp-layer" hidden></div>`;
   layer.appendChild(root);
 
@@ -33,6 +37,8 @@ export function mountExtras(layer: HTMLElement, game: GameApi, audio: AudioApi):
   const sLayer = root.querySelector('.xs-layer') as HTMLElement;
   const sheet = root.querySelector('.xs-sheet') as HTMLElement;
   const pLayer = root.querySelector('.xp-layer') as HTMLElement;
+  const iLayer = root.querySelector('.xi-layer') as HTMLElement;
+  const noteEl = root.querySelector('.xn-note') as HTMLButtonElement;
 
   const sfx = (n: SfxName) => { try { audio.playSfx(n); } catch { /* ignore */ } };
 
@@ -112,7 +118,7 @@ export function mountExtras(layer: HTMLElement, game: GameApi, audio: AudioApi):
     pLayer.hidden = false;
     const card = pLayer.querySelector('.xp-card') as HTMLElement | null;
     if (card) pulseClass(card, 'in');
-    if (p.kind === 'gift' || p.kind === 'chapter') { confetti(); burst(pLayer.querySelector('.xp-halo')); }
+    if (p.kind === 'gift' || p.kind === 'chapter') { confetti(); if (p.dream) setTimeout(confetti, 500); burst(pLayer.querySelector('.xp-halo')); }
     else if (p.kind === 'wish' || p.kind === 'unlock') burst(pLayer.querySelector('.xp-halo'));
     // Let the pop-in start before moving focus (and avoid an accidental double-tap dismiss).
     pLayer.dataset.lock = String(performance.now() + 350);
@@ -126,6 +132,44 @@ export function mountExtras(layer: HTMLElement, game: GameApi, audio: AudioApi):
       hideTimer = 0;
       pLayer.hidden = true; pLayer.classList.remove('out'); pLayer.innerHTML = '';
     }, reducedMotion() ? 0 : 220);
+  }
+
+  /* --------------------- shop product card (tap a shelf) --------------------- */
+  let cardId: KonbiniStockId | null = null;
+  function showCard(id: KonbiniStockId): void {
+    cardId = id;
+    iLayer.innerHTML = productCardHtml(game, id);
+    iLayer.hidden = false;
+    pulseClass(iLayer.querySelector('.xi-card'), 'in');
+    (iLayer.querySelector('[data-xf="xi-add"]') as HTMLElement | null)?.focus({ preventScroll: true });
+  }
+  function hideCard(): void {
+    if (iLayer.hidden) return;
+    cardId = null;
+    iLayer.hidden = true;
+    iLayer.innerHTML = '';
+  }
+
+  /* ------------------ "new journal page" note (not a popup) ------------------ */
+  const notes: { id: string; title: string }[] = [];
+  let noteId = '';
+  let noteTimer = 0;
+  function hideNote(): void {
+    if (noteTimer) { clearTimeout(noteTimer); noteTimer = 0; }
+    noteEl.hidden = true;
+    noteId = '';
+  }
+  function syncNote(s: GameState): void {
+    if (noteId || !notes.length) return;
+    if (s.mode === 'story' || s.popup || s.mode === 'title') return; // wait for a free moment
+    const n = notes.shift()!;
+    noteId = n.id;
+    noteEl.innerHTML = `<span class="xn-note-ico" aria-hidden="true">✦</span><span class="xn-note-t"><small>New journal page</small><b></b></span><span class="xn-note-go" aria-hidden="true">Read</span>`;
+    (noteEl.querySelector('b') as HTMLElement).textContent = n.title;
+    noteEl.setAttribute('aria-label', `New journal page: ${n.title}. Open the journal`);
+    noteEl.hidden = false;
+    pulseClass(noteEl, 'in');
+    noteTimer = window.setTimeout(hideNote, 4200);
   }
 
   /* ------------------------------- konbini ------------------------------- */
@@ -170,6 +214,23 @@ export function mountExtras(layer: HTMLElement, game: GameApi, audio: AudioApi):
         break;
       }
       case 'close': sfx('tap'); closeSheet(); break;
+      case 'card-close': sfx('tap'); hideCard(); break;
+      case 'card-add': {
+        const pid = cardId;
+        hideCard();
+        if (pid) { try { game.konbiniTake(pid); } catch (err) { console.error(err); } }
+        frame();
+        break;
+      }
+      case 'note': {
+        const nid = noteId;
+        hideNote();
+        sfx('page');
+        // the journal can't open over a running café day: pause is not worth it, the page waits in the book
+        const m = game.state.mode;
+        if (nid && (m === 'home' || m === 'konbini' || m === 'dayEnd')) { try { api.onOpenJournal?.(nid); } catch (err) { console.error(err); } }
+        break;
+      }
       case 'tab': sfx('tap'); tab = id as RecipeTab; refreshSheet(); break;
       case 'mart': sfx('tap'); closeSheet(); game.goTo('konbini'); break;
       case 'cook': {
@@ -217,11 +278,12 @@ export function mountExtras(layer: HTMLElement, game: GameApi, audio: AudioApi):
 
   // Escape / Tab trap for our dialogs (capture so the core doesn't also react, e.g. pause the day).
   document.addEventListener('keydown', (e) => {
-    const box = !pLayer.hidden ? pLayer.querySelector('.xp-card') as HTMLElement | null : open ? sheet : null;
+    const box = !pLayer.hidden ? pLayer.querySelector('.xp-card') as HTMLElement | null
+      : !iLayer.hidden ? iLayer.querySelector('.xi-card') as HTMLElement | null : open ? sheet : null;
     if (!box) return;
     if (e.key === 'Escape') {
       e.preventDefault(); e.stopImmediatePropagation();
-      if (!pLayer.hidden) { game.dismissPopup(); frame(); } else closeSheet();
+      if (!pLayer.hidden) { game.dismissPopup(); frame(); } else if (!iLayer.hidden) hideCard(); else closeSheet();
       return;
     }
     if (e.key === 'Tab') {
@@ -235,6 +297,8 @@ export function mountExtras(layer: HTMLElement, game: GameApi, audio: AudioApi):
   }, { capture: true });
 
   game.subscribe((e) => {
+    if (e.type === 'konbiniPick') showCard(e.id);
+    if (e.type === 'secret') notes.push({ id: e.id, title: e.title });
     if (e.type === 'progress' && open) queueMicrotask(() => { if (open && sheetStateKey() !== sheetKey) refreshSheet(); });
   });
 
@@ -254,16 +318,20 @@ export function mountExtras(layer: HTMLElement, game: GameApi, audio: AudioApi):
       bar.hidden = s.mode !== 'konbini';
       barKey = '';
       if (prev && open) closeSheet();
+      hideCard();
+      if (s.mode === 'story' || s.mode === 'title') hideNote();
     }
+    syncNote(s);
     if (s.mode === 'konbini') syncKonbini(s);
     if (open && sheetStateKey() !== sheetKey) refreshSheet();
   }
 
   frame();
 
-  return {
+  const api: Extras = {
     frame,
-    openRecipes() { tab = 'recipes'; openSheet('recipes'); },
+    openRecipes(t = 'recipes') { tab = t; openSheet('recipes'); },
     openCalendar() { openSheet('calendar'); },
   };
+  return api;
 }

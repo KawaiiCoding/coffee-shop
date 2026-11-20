@@ -4,12 +4,13 @@ import {
   character, counterBack, counterFront, decor, decorSvg, itemSvg, roomBack, sceneDefs, seat, table, titleArtSvg, upgradeSvg,
 } from '../art';
 import { BARISTA_LOOK } from '../engine/looks';
+import { DAYS_PER_GAME_DAY } from '../engine/calendar';
 import { BARISTA, DECOR_ANCHOR, TABLES } from '../layout';
 import type { DecorId, DecorSlot, DayStats, GameApi, MenuItemId, TableStyle, ThemeId, UpgradeId } from '../types';
 import { coins, currentGoal, goalChipHtml, homeItemsHtml, pay } from './screens';
 import { art, esc, firstIcon, icon } from './util';
 
-export type SheetKind = 'pause' | 'upgrades' | 'decor' | 'settings' | 'home';
+export type SheetKind = 'pause' | 'upgrades' | 'decor' | 'settings' | 'home' | 'help';
 
 export type UpgradeTab = 'cafe' | 'menu' | 'style';
 
@@ -21,6 +22,8 @@ export interface UiState {
   upTab?: UpgradeTab;
   /** Decor item shown in the Decor sheet's café preview (null = the café as it is). */
   decorPreview?: DecorId | null;
+  /** One-time pointer at the Upgrades / Decorate buttons on the day-complete card. */
+  coachShop?: boolean;
 }
 
 export const SLOTS: { id: DecorSlot; label: string }[] = [
@@ -32,7 +35,7 @@ export const SLOTS: { id: DecorSlot; label: string }[] = [
 ];
 
 export const SHEET_TITLES: Record<SheetKind, string> = {
-  pause: 'Paused', upgrades: 'Upgrades', decor: 'Decorate', settings: 'Settings', home: 'Make it cozy',
+  pause: 'Paused', upgrades: 'Upgrades', decor: 'Decorate', settings: 'Settings', home: 'Make it cozy', help: 'How to play',
 };
 
 /** "You have [coin] 120 Café coins" line at the top of café shops. */
@@ -47,7 +50,8 @@ export function calendarChipHtml(game: GameApi): string {
   if (today) { text = `${today.name} today!`; id = today.id; }
   else if (n && n.daysLeft <= 30) {
     id = n.id;
-    text = n.daysLeft <= 0 ? `${n.name} today!` : n.daysLeft === 1 ? `${n.name} is tomorrow!` : `${n.name} in ${n.daysLeft} days`;
+    const w = Math.ceil(n.daysLeft / DAYS_PER_GAME_DAY);
+    text = n.daysLeft <= 0 ? `${n.name} today!` : w <= 1 ? `${n.name} is next!` : `${n.name} in ${w} work days`;
   }
   if (!text) return '';
   const ic = firstIcon([id, c.season, 'calendar']);
@@ -68,6 +72,7 @@ export function titleHtml(game: GameApi): string {
   const fresh = !(game.state.progress.storySeen ?? []).includes('intro');
   return `
     <button class="ibtn title-settings" data-act="open" data-sheet="settings" aria-label="Settings">${icon('settings')}</button>
+    <button class="ibtn title-help" data-act="open" data-sheet="help" aria-label="How to play"><b aria-hidden="true">?</b></button>
     <div class="title-inner">
       ${pic || '<span class="title-art title-art-fb" aria-hidden="true"><i></i></span>'}
       <h1 class="title-name">Coffee Shop</h1>
@@ -80,7 +85,7 @@ export function titleHtml(game: GameApi): string {
 }
 
 /* ---------------------------- day end ---------------------------- */
-export function dayEndHtml(game: GameApi, st: DayStats | null): string {
+export function dayEndHtml(game: GameApi, st: DayStats | null, ui?: UiState): string {
   const stats = st ?? game.state.dayStats;
   let stars = '';
   for (let i = 0; i < 3; i++) {
@@ -97,15 +102,18 @@ export function dayEndHtml(game: GameApi, st: DayStats | null): string {
         <li><span>Left unhappy</span><b>${esc(stats?.lost ?? 0)}</b></li>
         <li class="tips-line"><span>Tips <small class="cur-name cur-coin">Café coins</small></span><b>${coins(stats?.tips ?? 0, '+')}</b></li>
         <li class="pay-line"><span>Your pay</span><b>${pay(stats?.salary ?? 0, '+')}</b></li>
+        ${stats?.treat ? `<li class="treat-line"><span>Snack from Button</span><b>${esc(game.catalog.snacks.find((x) => x.id === stats.treat)?.name ?? 'Snack')}</b></li>` : ''}
       </ul>
       ${goalChipHtml(safe(() => currentGoal(game), null), 'on-card')}
       <div class="row dayend-go">
         <button class="btn btn-soft" data-act="start" data-focus="next">Next day</button>
         <button class="btn btn-primary btn-go" data-act="go-home" data-focus="start">${icon('home')}<span>Go home</span></button>
       </div>
-      <div class="quick">
+      <div class="quick ${ui?.coachShop ? 'coach' : ''}">
+        ${ui?.coachShop ? `<span class="coach-tip" aria-hidden="true">Spend your tips ${icon('coin')} here!</span>` : ''}
         <button class="btn btn-soft" data-act="open" data-sheet="upgrades">${icon('shop')}<span>Upgrades</span></button>
         <button class="btn btn-soft" data-act="open" data-sheet="decor">${icon('decor')}<span>Decorate</span></button>
+        <button class="btn btn-soft btn-help" data-act="open" data-sheet="help" aria-label="How to play"><b aria-hidden="true">?</b></button>
       </div>
     </div>`;
 }
@@ -347,11 +355,60 @@ function settingsHtml(game: GameApi, ui: UiState): string {
         </div>`
     : '<button class="btn btn-ghost" data-act="reset-ask" data-focus="reset-ask">Reset progress</button>'}
     </div>
+    <button class="btn btn-soft set-help" data-act="open" data-sheet="help" data-focus="set-help"><b aria-hidden="true">?</b><span>How to play</span></button>
     <p class="credits">Music: add your jazz tracks in public/music</p>`;
+}
+
+/* ------------------------------ help ------------------------------ */
+/** "How to play": the two kinds of money, where each is spent, and what to do when. Buttons jump straight there. */
+function helpHtml(game: GameApi): string {
+  const s = game.state;
+  const atHome = s.mode === 'home';
+  const konbini = s.progress.konbiniOpen;
+  const step = (n: number, t: string) => `<li><i>${n}</i><span>${t}</span></li>`;
+  return `
+    <div class="help">
+      <section class="help-card">
+        <h3>${icon('cafe')}At the café</h3>
+        <ol class="help-steps">
+          ${step(1, 'Tap a guest at the door, then a free table.')}
+          ${step(2, 'Tap their table to take the order.')}
+          ${step(3, 'When it is on the counter, tap the counter.')}
+          ${step(4, 'Tap the table to serve, then tap the coins.')}
+        </ol>
+        <p>A day lasts one minute. Quick service means bigger tips.</p>
+      </section>
+      <section class="help-card help-money">
+        <h3>Two kinds of money</h3>
+        <div class="help-row">${coins(0).replace('<b>0</b>', '<b>Tips</b>')}<span>Gold café coins from guests. They buy <b>café upgrades and decor</b>.</span></div>
+        <div class="help-jump">
+          <button class="btn btn-small btn-primary" data-act="open" data-sheet="upgrades" data-focus="help-up">${icon('shop')}<span>Upgrades</span></button>
+          <button class="btn btn-small btn-primary" data-act="open" data-sheet="decor" data-focus="help-dec">${icon('decor')}<span>Decorate</span></button>
+        </div>
+        <p class="help-where">Find them on the main menu and on the “Day complete” card.</p>
+        <div class="help-row">${pay(0).replace('<b>0</b>', '<b>Pay</b>')}<span>Green notes: Mocha’s own pay. It buys <b>food, things for home and dreams</b>.</span></div>
+        <div class="help-jump">
+          ${atHome ? `<button class="btn btn-small btn-primary" data-act="open" data-sheet="home" data-focus="help-cozy">${icon('decor')}<span>Cozy shop</span></button>` : ''}
+          ${atHome && konbini ? `<button class="btn btn-small btn-primary" data-act="go-konbini" data-focus="help-mart">${icon('konbini')}<span>Hoshi Mart</span></button>` : ''}
+        </div>
+        <p class="help-where">At home: tap <b>More</b> for the Cozy shop${konbini ? ', <b>Shop</b> to walk to Hoshi Mart' : ' (Hoshi Mart opens on day 3)'}, and <b>Save</b> to fill the dream jar.</p>
+      </section>
+      <section class="help-card">
+        <h3>${icon('home')}At home, in the evening</h3>
+        <ul class="help-list">
+          <li>${icon('bowl')}<span><b>Cook</b> and <b>Eat</b> (or eat a snack) for energy.</span></li>
+          <li>${icon('bath')}<span><b>Bath</b>, <b>Call Mom</b>, <b>Read</b>: once a day, they make Mocha happy.</span></li>
+          <li>${icon('energy')}<span>Rested bears walk faster. Happy bears earn bigger tips.</span></li>
+          <li>${icon('goal')}<span>The round <b>Goal</b> button (top left) shows your chapter and dream.</span></li>
+          <li>${icon('moon')}<span><b>Sleep</b> starts the next day.</span></li>
+        </ul>
+      </section>
+    </div>`;
 }
 
 export function sheetBodyHtml(kind: SheetKind, game: GameApi, ui: UiState): string {
   switch (kind) {
+    case 'help': return helpHtml(game);
     case 'pause': return pauseHtml(ui);
     case 'upgrades': return upgradesHtml(game, ui);
     case 'decor': return decorHtml(game, ui);

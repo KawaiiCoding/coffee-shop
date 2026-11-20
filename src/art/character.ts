@@ -4,7 +4,7 @@
 import type { CharacterLook, DrawCharacterOpts, HatKind, HeldProp, MenuItemId, Species } from '../types';
 import { INK, EYE, CREAM, fl, ln, sh, blob, box } from './kit';
 import { n } from './core';
-import { item } from './items';
+import { item, itemCoaster } from './items';
 
 const OUT = INK;
 const SCALE = 0.88;
@@ -186,7 +186,7 @@ function tray(items: MenuItemId[]): string {
   const list = items.slice(0, 3);
   const xs = list.length === 1 ? [30] : list.length === 2 ? [25, 36] : [21, 30, 39];
   list.forEach((id, i) => {
-    s += `<g transform="translate(${xs[i]},${i === 1 && list.length === 3 ? -10 : -9}) scale(.62)">${item(id)}</g>`;
+    s += `<g transform="translate(${xs[i]},${i === 1 && list.length === 3 ? -10 : -9}) scale(.62)">${itemCoaster(id)}${item(id)}</g>`;
   });
   return s;
 }

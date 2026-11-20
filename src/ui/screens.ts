@@ -9,7 +9,7 @@ import { art, esc, firstIcon, icon, type UiIcon } from './util';
 
 const safe = <T>(f: () => T, d: T): T => { try { return f(); } catch { return d; } };
 
-/** Mocha's own money ("Pay"): rose pill with the 'pay' icon. Café coins are gold (see sheets.ts coins()). */
+/** Mocha's own money ("Pay"): green pill with the yen-note 'pay' icon. Café coins are gold (see sheets.ts coins()). */
 export const pay = (n: number, sign = '') =>
   `<span class="cost cost-pay" aria-label="${esc(`${sign}${n} pay`)}">${icon('pay')}<b>${sign}${esc(n)}</b></span>`;
 /** @deprecated use pay() */
@@ -87,7 +87,14 @@ const DOCK_ORDER: (HomeActionId | 'konbini')[] = ['cook', 'eat', 'bath', 'save',
 /** Round buttons in the dock row besides "more" and Sleep. */
 const DOCK_MAIN = 5;
 
-export interface HomeUi { more: boolean; chip: boolean }
+export interface HomeUi { more: boolean; chip: boolean; /** show the one-time "shops are in here" pointer on More */ coachMore?: boolean }
+
+const hasSnack = (game: GameApi) => {
+  const pantry = game.state.progress.home?.pantry ?? {};
+  return game.catalog.snacks.some((sn) => (pantry[sn.id] ?? 0) > 0);
+};
+/** Eat with nothing cooked but a snack in the pantry: the button opens the snack picker. */
+export const eatOpensSnacks = (game: GameApi) => !game.state.progress.home?.meal && hasSnack(game);
 
 /** Why an action can't be done yet because something is missing at home.
  *  null = available, 'hide' = don't show the button at all. */
@@ -101,9 +108,7 @@ export function homeLock(game: GameApi, id: HomeActionId): string | null | 'hide
       if ((h?.books ?? 0) <= 0) return game.state.progress.konbiniOpen ? 'No books yet. Buy one at Hoshi Mart' : 'Mocha has no books yet';
       return null;
     case 'warm': return has('fireplace') ? null : 'hide';
-    case 'eat':
-      if (!has('dining_table') && !h?.meal) return 'hide';
-      return h?.meal ? null : 'Cook a meal first';
+    case 'eat': return null; // always there: a cooked meal, a snack, or a nudge to cook
     default: return null;
   }
 }
@@ -111,7 +116,8 @@ export function homeLock(game: GameApi, id: HomeActionId): string | null | 'hide
 interface DockBtn { key: string; html: string; locked: boolean }
 
 function actionBtn(game: GameApi, a: HomeActionDef, busy: HomeActionId | null, lock: string | null): DockBtn {
-  const can = lock ? { ok: false, reason: lock } : safe(() => game.canDoHomeAction(a.id), { ok: false, reason: 'Not right now' });
+  let can = lock ? { ok: false, reason: lock } : safe(() => game.canDoHomeAction(a.id), { ok: false, reason: 'Not right now' });
+  if (a.id === 'eat' && !lock && busy === null && eatOpensSnacks(game)) can = { ok: true };
   const short = ACTION_SHORT[a.id] ?? a.name;
   const doneToday = game.state.progress.home?.doneToday?.includes(a.id) ?? false;
   const why = can.ok ? a.description : (can.reason ?? 'Not right now');
@@ -169,11 +175,13 @@ export function homeDockHtml(game: GameApi, ui: HomeUi): { row: string; more: st
     + simpleBtn('open', 'cozy', 'decor', 'Cozy shop', 'Make it cozy: buy things for your home', 'data-sheet="home"')
     + simpleBtn('calendar', 'calendar', 'calendar', 'Calendar', 'Open the calendar')
     + simpleBtn('journal', 'journal', firstIcon(['journal', 'book']), 'Journal', 'Open Mocha’s journal')
-    + simpleBtn('news', 'news', firstIcon(['newspaper', 'news', 'sun']), 'Paper', 'Read today’s newspaper');
+    + simpleBtn('news', 'news', firstIcon(['newspaper', 'news', 'sun']), 'Paper', 'Read today’s newspaper')
+    + simpleBtn('open', 'help', 'star', 'Help', 'How to play: where to buy and upgrade', 'data-sheet="help"');
   const moreBtn = `
     <button class="act act-more ${ui.more ? 'on' : ''}" data-act="home-more" data-focus="act-more"
       aria-expanded="${ui.more}" aria-label="More things to do">
       <span class="act-ring">${ui.more ? icon('close') : icon('more')}</span><span class="act-name">More</span>
+      ${ui.coachMore && !ui.more ? '<span class="coach-tip coach-up" aria-hidden="true">Cozy shop &amp; more!</span>' : ''}
     </button>`;
   return { row: main.map((b) => b.html).join('') + moreBtn + sleepHtml(game), more: moreItems };
 }
@@ -209,20 +217,11 @@ export function goalChipHtml(g: Goal, cls = ''): string {
     </span>`;
 }
 
-/** Slim chip under the home top bar (goal + savings); tap to see the dream card and tomorrow's bonus. */
+/** The goal + dream card that drops down from the round Goal button in the home top bar (closed = nothing on screen). */
 export function homeChipHtml(game: GameApi, open: boolean): string {
+  if (!open) return '';
   const h = game.state.progress.home;
   const g = currentGoal(game);
-  const dream = h ? DREAMS[dreamStage(h)] : DREAMS[0];
-  const savings = `<span class="chip-save">${icon(dream ? dream.icon : 'heart')}${dream ? `<b>${esc(h?.savings ?? 0)}</b><small>/${esc(dream.goal)}</small>` : ''}</span>`;
-  const head = `
-    <button class="home-chip ${open ? 'open' : ''}" data-act="home-chip" data-focus="home-chip" aria-expanded="${open}"
-      aria-label="${esc(`${g ? `Chapter ${g.chapter + 1}: ${g.goal}. ` : ''}${open ? 'Hide details' : 'Show goal and dream'}`)}">
-      ${g ? goalChipHtml(g, 'in-chip') : `<span class="goal-chip in-chip">${icon('bike')}<span class="goal-t"><b>Dream</b> · a bicycle to visit Mom</span></span>`}
-      ${g ? savings : ''}
-      <span class="chip-caret" aria-hidden="true"></span>
-    </button>`;
-  if (!open) return head;
   const goalRow = g ? `
     <div class="goal-big">
       ${icon('goal')}
@@ -232,8 +231,8 @@ export function homeChipHtml(game: GameApi, open: boolean): string {
         <span class="dream-bar"><i style="transform:scaleX(${pct(g.progress).toFixed(3)})"></i></span>
       </div>
     </div>` : '';
-  return `${head}
-    <div class="chip-panel">
+  return `
+    <div class="chip-panel" role="group" aria-label="Goal and dream">
       ${goalRow}
       ${h ? dreamHtml(h) : ''}
       <p class="chip-bonus">${esc(bonusText(game))}</p>

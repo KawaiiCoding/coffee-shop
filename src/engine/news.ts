@@ -8,6 +8,7 @@ import { ARTICLES, COMICS, HEADLINES, HOROSCOPES, SALE_LINES, WEATHER_LINES, typ
 import { DISHES, GOODS, INGREDIENTS, REGULARS, SNACKS } from '../content/progression';
 import { SECRETS } from '../content/secrets';
 import { mulberry32 } from './rng';
+import { DAYS_PER_GAME_DAY } from './calendar';
 
 type Rng = () => number;
 type Season = CalendarInfo['season'];
@@ -158,7 +159,7 @@ export function makeIssue(p: Progress, cal: CalendarInfo): NewsIssue {
     friendId,
     dish,
     festival: cal?.next?.name ?? 'the next festival',
-    days: cal?.next ? String(cal.next.daysLeft) : 'a few',
+    days: cal?.next ? String(Math.max(1, Math.ceil(cal.next.daysLeft / DAYS_PER_GAME_DAY))) : 'a few', // work days
     served: String(p.stats?.served ?? 0),
     item: sale ? stockName(sale.item) : 'melon bread',
     percent: String(sale ? sale.percent : percent),

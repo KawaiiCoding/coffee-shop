@@ -101,7 +101,8 @@
 .xr-chip .fb-glyph { font-size: calc(var(--u) * 18); }
 .xr-t { display: flex; flex-direction: column; align-items: flex-start; font: 800 calc(var(--u) * 14)/1.05 var(--display); white-space: nowrap; }
 .xr-t small { font: 700 calc(var(--u) * 10)/1 var(--body); opacity: .7; }
-.xr-pay, .xr-tips { background: color-mix(in srgb, var(--gold) 30%, var(--cream)); }
+.xr-tips { background: color-mix(in srgb, var(--gold) 30%, var(--cream)); }
+.xr-pay { background: #dff3e3; }
 .xr-recipe { background: color-mix(in srgb, var(--accent) 14%, var(--cream)); }
 .xr-furniture, .xr-homeItem, .xr-decor { background: color-mix(in srgb, var(--accent2) 26%, var(--cream)); }
 
@@ -314,3 +315,74 @@
   .xc-cell.today, .xp-star .xp-big-ico, .xp-wish .xp-big-ico { animation: none !important; }
   .xp-layer.out .xp-card, .xp-layer.out .xp-backdrop { transition: none; }
 }
+
+
+/* ================= v7 additions ================= */
+/* chapter complete card */
+.xp-medal { display: grid; place-items: center; width: 100%; height: 100%; }
+.xp-chapter .xp-halo { align-items: center; animation: xp-spin-glow 2.4s ease-in-out infinite; }
+.xp-chapter .xp-big-ico { width: 62%; height: 62%; }
+.xp-dream .xp-tag { background: var(--accent); color: #fff; }
+.xp-dream .xp-halo { background: radial-gradient(circle at 50% 45%, #fff 0 34%, #9bd8c8 72%); }
+.xp-dream .xp-title { font-size: calc(var(--u) * 30); }
+.xp-next {
+  margin: calc(var(--u) * 2) 0 0; padding: calc(var(--u) * 8) calc(var(--u) * 12); width: 100%;
+  display: flex; flex-direction: column; gap: calc(var(--u) * 2); text-align: center;
+  background: color-mix(in srgb, var(--accent2) 22%, var(--paper)); border: calc(var(--u) * 2) dashed var(--ink); border-radius: calc(var(--u) * 14);
+}
+.xp-next small { font: 800 calc(var(--u) * 11)/1 var(--display); text-transform: uppercase; letter-spacing: .08em; opacity: .7; }
+.xp-next b { font: 800 calc(var(--u) * 16)/1.2 var(--display); }
+@keyframes xp-spin-glow { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--gold) 60%, transparent); } 50% { box-shadow: 0 0 0 calc(var(--u) * 10) transparent; } }
+
+/* shop product card */
+.xi-layer { position: absolute; inset: 0; z-index: 50; display: grid; place-items: center; pointer-events: auto; padding: calc(var(--u) * 20); }
+.xi-backdrop { position: absolute; inset: 0; background: rgba(60,35,30,.45); }
+.xi-card {
+  position: relative; z-index: 1; width: 100%; max-width: calc(var(--u) * 300);
+  display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 8); text-align: center;
+  padding: calc(var(--u) * 18) calc(var(--u) * 16) calc(var(--u) * 16);
+}
+.xi-card.in { animation: x-pop-in .4s cubic-bezier(.3, 1.6, .45, 1) both; }
+.xi-x { position: absolute; top: calc(var(--u) * 8); right: calc(var(--u) * 8); }
+.xi-kind {
+  padding: calc(var(--u) * 4) calc(var(--u) * 12); border-radius: 999px; background: var(--accent2); color: #24533d;
+  border: calc(var(--u) * 2) solid var(--ink); font: 800 calc(var(--u) * 12)/1 var(--display); text-transform: uppercase; letter-spacing: .06em;
+}
+.xi-pic {
+  width: calc(var(--u) * 150); height: calc(var(--u) * 150); padding: calc(var(--u) * 14);
+  background: radial-gradient(circle at 50% 45%, #fff 0 45%, color-mix(in srgb, var(--gold) 30%, var(--paper)) 75%);
+  border: calc(var(--u) * 2.5) solid var(--ink); border-radius: 50%;
+}
+.xi-name { margin: 0; font: 800 calc(var(--u) * 28)/1.05 var(--display); color: var(--text); }
+.xi-what { margin: 0; font: 700 calc(var(--u) * 15)/1.35 var(--body); opacity: .9; }
+.xi-have { margin: 0; font: 800 calc(var(--u) * 12)/1 var(--display); opacity: .65; }
+.xi-stats { justify-content: center; }
+.xi-buy { display: flex; align-items: center; gap: calc(var(--u) * 10); width: 100%; margin-top: calc(var(--u) * 6); }
+.xi-price {
+  flex: none; display: inline-flex; align-items: center; gap: calc(var(--u) * 5);
+  padding: calc(var(--u) * 8) calc(var(--u) * 12); background: #dff3e3; color: #23643f;
+  border: calc(var(--u) * 2.5) solid var(--ink); border-radius: 999px; font: 800 calc(var(--u) * 20)/1 var(--display);
+}
+.xi-price .ico { width: calc(var(--u) * 24); height: calc(var(--u) * 24); }
+.xi-price.poor { background: #fde0e0; color: #b5442f; }
+.xi-price s { font-size: calc(var(--u) * 13); opacity: .6; }
+.xi-price i { font: 800 calc(var(--u) * 11)/1 var(--display); font-style: normal; color: #c4506a; }
+.xi-add { flex: 1; min-height: calc(var(--u) * 50); font-size: calc(var(--u) * 17); }
+.xi-add .ico { width: calc(var(--u) * 22); height: calc(var(--u) * 22); }
+
+/* "new journal page" note: small, tappable, never blocks the game */
+.xn-note {
+  position: absolute; top: calc(var(--u) * 62); left: 50%; transform: translateX(-50%); z-index: 32; pointer-events: auto;
+  display: flex; align-items: center; gap: calc(var(--u) * 8); max-width: 92%;
+  padding: calc(var(--u) * 6) calc(var(--u) * 8) calc(var(--u) * 6) calc(var(--u) * 12);
+  background: #fff8e6; color: var(--text); border: calc(var(--u) * 2.5) solid var(--ink); border-radius: 999px;
+  box-shadow: 0 calc(var(--u) * 3) 0 var(--ink); text-align: left;
+}
+.xn-note.in { animation: xn-note-in .45s cubic-bezier(.3, 1.6, .45, 1) both; }
+@keyframes xn-note-in { from { transform: translate(-50%, -160%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+.xn-note-ico { font-size: calc(var(--u) * 18); color: var(--gold-d); }
+.xn-note-t { display: flex; flex-direction: column; min-width: 0; }
+.xn-note-t small { font: 800 calc(var(--u) * 10)/1.1 var(--display); text-transform: uppercase; letter-spacing: .06em; opacity: .7; }
+.xn-note-t b { font: 800 calc(var(--u) * 14)/1.15 var(--display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.xn-note-go { flex: none; padding: calc(var(--u) * 5) calc(var(--u) * 10); border-radius: 999px; background: var(--accent); color: #fff; font: 800 calc(var(--u) * 12)/1 var(--display); border: calc(var(--u) * 2) solid var(--ink); }
+.xc-note { margin: calc(var(--u) * 12) 0 0; text-align: center; font: 700 calc(var(--u) * 12)/1.35 var(--body); opacity: .7; font-style: italic; }

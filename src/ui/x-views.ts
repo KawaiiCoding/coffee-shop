@@ -1,9 +1,11 @@
 /* HTML builders for the UI extras. Pure functions of game state. */
-import type { DishDef, DishId, GameApi, IngredientId, Popup, SnackId } from '../types';
-import { stickerSvg } from '../art';
+import type { DishDef, DishId, GameApi, IngredientId, KonbiniStockId, Popup, SnackId } from '../types';
+import { priceOf } from '../engine/konbini';
+import { DAYS_PER_GAME_DAY } from '../engine/calendar';
+import { productSvg } from '../art';
 import { esc, icon } from './util';
 import {
-  countdown, daysUntil, dishName, dishPic, eventSticker, payIcon, popupFrom, productPic,
+  countdown, daysUntil, workDays, dishName, dishPic, eventSticker, payIcon, pic, popupFrom, productPic,
   rewardChip, SEASON_NAME, seasonIcon, stockDef, xIcon, type EventLike,
 } from './x-shared';
 
@@ -13,37 +15,79 @@ const KIND_TAG: Record<Popup['kind'], string> = {
   secret: 'New journal page!',
 };
 
-/** The sticker of the journal page a 'secret' popup announces (matched by title, else the latest found). */
-function secretSticker(game: GameApi, p: Popup): string {
-  try {
-    const defs = game.catalog.secrets ?? [];
-    const found = game.state.progress.secrets ?? [];
-    const def = defs.find((d) => d.title === p.title)
-      ?? defs.find((d) => !!d.title && (p.title.includes(d.title) || p.text.includes(d.title)))
-      ?? defs.find((d) => d.id === found[found.length - 1]);
-    const svg = def ? stickerSvg(def.sticker, 96) : '';
-    return svg ? `<span class="xp-stk" aria-hidden="true">${svg}</span>` : '';
-  } catch { return ''; }
-}
-
 export function popupHtml(game: GameApi, p: Popup): string {
   const f = popupFrom(game, p);
-  if (p.kind === 'secret') { const stk = secretSticker(game, p); if (stk) { f.art = stk; f.name = ''; } }
   const from = f.name && p.kind === 'gift' ? `From ${f.name}` : f.name;
   const chips = (p.rewards ?? []).map((r) => rewardChip(game, r)).join('');
+  const isChapter = p.kind === 'chapter';
+  const tag = isChapter
+    ? (p.dream ? 'A dream came true!' : p.chapter ? `Chapter ${p.chapter} complete!` : 'Chapter done!')
+    : KIND_TAG[p.kind] ?? '';
+  const art = isChapter
+    ? `<span class="xp-medal" aria-hidden="true">${xIcon([p.dream ? 'bike' : 'goal', 'star'], 'star', 'xp-big-ico')}</span>`
+    : f.art;
+  const next = isChapter
+    ? (p.next ? `<p class="xp-next"><small>Next chapter</small><b>${esc(p.next)}</b></p>` : '<p class="xp-next"><b>The whole story, told. Thank you for playing!</b></p>')
+    : '';
   return `
     <div class="xp-backdrop"></div>
-    <div class="xp-card card xp-${p.kind}${f.star ? ' xp-star' : ''}" role="dialog" aria-modal="true"
+    <div class="xp-card card xp-${p.kind}${f.star ? ' xp-star' : ''}${p.dream ? ' xp-dream' : ''}" role="dialog" aria-modal="true"
          aria-labelledby="xp-h" aria-describedby="xp-p" tabindex="-1">
-      <span class="xp-tag">${esc(KIND_TAG[p.kind] ?? '')}</span>
+      <span class="xp-tag">${esc(tag)}</span>
       <div class="xp-from">
-        <span class="xp-halo">${f.art}</span>
-        ${from ? `<span class="xp-name">${esc(from)}</span>` : ''}
+        <span class="xp-halo">${art}</span>
+        ${from && !isChapter ? `<span class="xp-name">${esc(from)}</span>` : ''}
       </div>
       <h2 id="xp-h" class="xp-title">${esc(p.title)}</h2>
       ${p.text ? `<p id="xp-p" class="xp-text">${esc(p.text)}</p>` : ''}
       ${chips ? `<ul class="xr-list" aria-label="You got">${chips}</ul>` : ''}
-      <button class="btn btn-primary btn-big xp-yay" data-x="yay" data-xf="yay">Yay!</button>
+      ${next}
+      <button class="btn btn-primary btn-big xp-yay" data-x="yay" data-xf="yay">${isChapter ? 'Hooray!' : 'Yay!'}</button>
+    </div>`;
+}
+
+/* --------------------------- shop product card --------------------------- */
+/** Tap a shelf in Hoshi Mart: the product shown big with its name, price and what it is for. */
+export function productCardHtml(game: GameApi, id: KonbiniStockId): string {
+  const d = stockDef(game, id);
+  const c = game.catalog;
+  let price = d.price;
+  try { price = priceOf(id); } catch { /* keep list price */ }
+  const onSale = price < d.price;
+  let kind = '', what = '';
+  if (d.kind === 'ingredient') {
+    kind = 'Ingredient';
+    const known = new Set(game.state.progress.recipes ?? []);
+    const uses = (c.dishes ?? []).filter((x) => (x.ingredients as Record<string, number>)[id]);
+    const mine = uses.filter((x) => known.has(x.id)).map((x) => x.name);
+    what = mine.length ? `For cooking: ${mine.join(', ')}.`
+      : uses.length ? 'For cooking. You will learn a recipe for it later.' : 'For cooking at home.';
+  } else if (d.kind === 'snack') {
+    kind = 'Snack';
+    what = 'Ready to eat at home (tap Eat).';
+  } else {
+    kind = 'Little treat';
+    what = id === 'book' ? 'A storybook to read in the armchair at home.' : 'Makes Mocha happy right away.';
+  }
+  const sn = c.snacks.find((x) => x.id === id);
+  const gd = c.goods.find((x) => x.id === id);
+  const stats = sn ? statTags(sn.energy, sn.happiness) : gd && id !== 'book' ? statTags(0, gd.happiness) : '';
+  const have = (game.state.progress.home?.pantry as Record<string, number> | undefined)?.[id] ?? 0;
+  const wallet = game.state.progress.home?.wallet ?? 0;
+  return `
+    <div class="xi-backdrop" data-x="card-close"></div>
+    <div class="xi-card card" role="dialog" aria-modal="true" aria-labelledby="xi-h" tabindex="-1">
+      <button class="ibtn xi-x" data-x="card-close" aria-label="Close">${icon('close')}</button>
+      <span class="xi-kind">${esc(kind)}</span>
+      ${pic(() => productSvg(id, 160), d.name, 'xi-pic')}
+      <h2 id="xi-h" class="xi-name">${esc(d.name)}</h2>
+      <p class="xi-what">${esc(what)}</p>
+      ${stats ? `<div class="xs-stats xi-stats">${stats}</div>` : ''}
+      ${have > 0 ? `<p class="xi-have">You have ${have} at home</p>` : ''}
+      <div class="xi-buy">
+        <span class="xi-price${price > wallet ? ' poor' : ''}" aria-label="${esc(`Price ${price} pay`)}">${payIcon()}<b>${price}</b>${onSale ? `<s>${d.price}</s><i>Sale!</i>` : ''}</span>
+        <button class="btn btn-primary xi-add" data-x="card-add" data-xf="xi-add">${xIcon(['basket'], 'shop')}<span>Add to basket</span></button>
+      </div>
     </div>`;
 }
 
@@ -125,7 +169,7 @@ export function recipesHtml(game: GameApi, tab: RecipeTab): string {
         </li>`).join('')}</ul>`
       : `<div class="xs-hint">${xIcon(['basket'], 'shop')}<span>No snacks. Hoshi Mart has some!</span></div>`;
   }
-  return sheetHead('What shall we cook?') + `<div class="sheet-body xs-body-scroll">${segs}${body}</div>`;
+  return sheetHead(tab === 'snacks' ? 'Snack time!' : 'What shall we cook?') + `<div class="sheet-body xs-body-scroll">${segs}${body}</div>`;
 }
 
 /* ------------------------------- calendar ------------------------------- */
@@ -170,17 +214,18 @@ export function calendarHtml(game: GameApi): string {
       <li class="xc-ev${n === 0 ? ' now' : ''}">
         ${eventSticker(e, 'xc-ev-ico')}
         <div><b>${esc(countdown(e.name, n))}</b>${e.blurb ? `<small>${esc(e.blurb)}</small>` : ''}</div>
-        ${n > 0 ? `<span class="xc-n" aria-hidden="true">${n}<small>d</small></span>` : ''}
+        ${n > 0 ? `<span class="xc-n" aria-hidden="true">${workDays(n)}<small>d</small></span>` : ''}
       </li>`).join('')}</ul>` : '';
 
   return sheetHead('Calendar') + `<div class="sheet-body">
       <div class="xc-top">
         <span class="xc-season xc-${season}">${seasonIcon(season)}${esc(SEASON_NAME[season] ?? season)}</span>
-        <span class="xc-month">${esc(MONTHS[month - 1])} <small>${year}</small></span>
+        <span class="xc-month">${esc(MONTHS[month - 1])} <small>Year ${Math.max(1, year - 2023)}</small></span>
       </div>
       ${today ? `<p class="xs-note xc-today">${eventSticker(today)}Today is ${esc(today.name)}!</p>` : ''}
       <div class="xc-grid" role="group" aria-label="${esc(`${MONTHS[month - 1]} ${year}`)}">${cells}</div>
       ${upcoming}
+      <p class="xc-note">Time flies on Yarn Street: each work day hops ${DAYS_PER_GAME_DAY} days on the calendar, so the seasons keep changing.</p>
     </div>`;
 }
 

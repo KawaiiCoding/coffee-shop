@@ -62,7 +62,7 @@ export function konbiniStatic(s: GameState): string {
 /** The clerk's cute speech bubble; the tail points at their head. */
 function speechBubble(text: string, age: number, t: number, small: boolean): string {
   const fs = small ? 9.5 : 12;
-  const w = text.length * fs + (small ? 14 : 20), h = small ? 17 : 23;
+  const w = text.length * fs * 0.62 + (small ? 16 : 26), h = small ? 17 : 23;
   const tipX = KONBINI_CLERK.x - 8, tipY = KONBINI_CLERK.y - (small ? 84 : 82);
   const cx = Math.min(356 - w / 2, tipX - (small ? 10 : 20));
   const bx = Math.max(cx - w / 2 + 12, Math.min(cx + w / 2 - 12, tipX)) - tipX;

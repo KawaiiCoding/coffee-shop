@@ -142,7 +142,7 @@ export function createRenderer(svg: SVGSVGElement, game: GameApi): SceneRenderer
     out.push(art.brewIndicator(brewing ? brewing.progress : null, brewing ? brewing.item : null, s.time));
     s.counter.ready.forEach((id, i) => {
       const p = READY_SPOTS[i];
-      if (p) out.push(at(p.x, p.y, art.item(id)));
+      if (p) out.push(at(p.x, p.y, art.itemCoaster(id) + art.item(id)));
     });
 
     // y-sorted world

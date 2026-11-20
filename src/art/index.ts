@@ -6,7 +6,9 @@
    ===================================================================== */
 import type { DecorId, MenuItemId, StoryArtId, ThemeId } from '../types';
 import { storyArtA } from './story-a';
-import { storyArtB } from './story-b';
+import { storyArtB, bike } from './story-b';
+/** Mocha's bicycle (his first dream), parked at home once he has bought it. Centre between the wheels at (0,0). */
+export const dreamBike = (): string => `<g stroke-linecap="round" stroke-linejoin="round">${bike(0, 0, 0.72, '#8fd3c1')}</g>`;
 export { mess, placeGhost } from './mess';
 export { homeSceneDefs, homeBack, homeFront, savingsJar, homeSpotIcon, bathDoor, shootingStar, calendarArt, bedBlanket, HOME_WINDOW } from './home-room';
 export { furniture, furnitureFront, furnitureSvg } from './home-furniture';
@@ -26,7 +28,7 @@ export { palette } from './theme';
 export { sceneDefs, roomBack, roomFront } from './room';
 export { character } from './character';
 export { seat, table, counterBack, counterFront, brewIndicator } from './furniture';
-export { item, bubble, tapMarker, selectRing, effect } from './items';
+export { item, itemCoaster, bubble, tapMarker, selectRing, effect } from './items';
 export { iconSvg } from './icons';
 export type { IconName } from './icons';
 export { characterSvg, titleArtSvg } from './title';

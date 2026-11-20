@@ -7,6 +7,7 @@ import type {
   CharacterLook, DishId, GameApi, KonbiniStockId, Popup, Reward, SeasonEventDef, SeasonEventId,
 } from '../types';
 import { esc, icon, type UiIcon } from './util';
+import { DAYS_PER_GAME_DAY } from '../engine/calendar';
 
 /* ------------------------------ icons ------------------------------ */
 let unknownSvg: string | null = null;
@@ -179,10 +180,14 @@ export function daysUntil(today: { year: number; month: number; day: number }, m
   return n;
 }
 
+/** Work days until an event that is `n` calendar days away (the street's calendar hops a few days per work day). */
+export const workDays = (n: number): number => Math.ceil(Math.max(0, n) / DAYS_PER_GAME_DAY);
+
 export function countdown(name: string, n: number): string {
+  const w = workDays(n);
   if (n <= 0) return `${name} is today!`;
-  if (n === 1) return `${name} tomorrow!`;
-  return `${name} in ${n} days`;
+  if (w <= 1) return `${name} is next!`;
+  return `${name} in ${w} work days`;
 }
 
 export type EventLike = Pick<SeasonEventDef, 'id' | 'name' | 'month' | 'day' | 'blurb'> & { theme?: SeasonEventDef['theme'] };

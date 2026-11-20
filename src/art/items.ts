@@ -58,8 +58,11 @@ function cup(cupColor: string, drink: string, art: string, saucer = '#fff6ea', e
 }
 
 const ITEMS: Record<MenuItemId, string> = {
-  latte: cup('#fbeee0', '#c8936a',
-    fl(heartD(-0.3, -5.6, 2.1), WHITE)),
+  // latte: cream cup with a coffee-brown band, brown coffee, white heart
+  latte: cup('#fffaf2', '#b9794f',
+    fl(heartD(-0.3, -5.6, 2.1), WHITE),
+    '#fff6ea',
+    fl('M-7.9,-1.4 C-3,-0.4 3,-0.4 7.9,-1.4 L7.2,1.9 C3,2.9 -3,2.9 -7.2,1.9z', '#c8936a')),
 
   cocoa: (() => {
     const mug = 'M-7.4,-6 C-7.8,-0.5 -7.4,4.4 -5.4,5.8 C-2,6.6 2,6.6 5.4,5.8 C7.4,4.4 7.8,-0.5 7.4,-6z';
@@ -72,9 +75,13 @@ const ITEMS: Record<MenuItemId, string> = {
       + sh(box(0.6, -10.4, 4, 3.4, 1.2, 0.4), '#fbd3dc', 1.4);
   })(),
 
-  matcha: cup('#e9f0dc', '#9cc47a',
-    ln('M-3.6,-4.6 C-1.6,-6.8 1.8,-6.8 3.6,-5.2 C1.6,-3.8 -1.6,-3.6 -3.6,-4.6z M-3.6,-4.6 L3.6,-5.2', 1, '#eef6dc'),
-    '#f4f8ea'),
+  // matcha: a deep green tea bowl with no handle or saucer, bright green tea and a leaf
+  matcha: shadow(0, 7.8, 9.5, 1.6)
+    + sh('M-9,-4.6 C-9,2 -5.6,6.6 0,6.6 C5.6,6.6 9,2 9,-4.6z', '#5f9d6b', 2.2)
+    + ln('M-6.4,1.8 C-3,3.6 3,3.6 6.4,1.8', 1.3, '#cfe8c4')
+    + sh(blob(0, -4.6, 9, 2.3, 0.1), '#b7dd86', 1.8)
+    + sh('M-1.4,-4.8 C-4.6,-9 -1.4,-13.2 4.2,-12.8 C5.2,-8.6 2.6,-5.2 -1.4,-4.8z', '#7fbf5a', 1.5)
+    + ln('M-0.8,-5.4 L3.4,-11.8', 1, '#eef6dc'),
 
   cake: shadow(0, 8.4, 11, 1.6)
     + sh(blob(0, 5.6, 11.5, 2.6, 0.1), '#fff6ea', 2)
@@ -109,6 +116,17 @@ const ITEMS: Record<MenuItemId, string> = {
     '#fff6ea'),
 };
 
+/** Signature colour of each menu item (order bubbles, counter and tray coasters). */
+const ITEM_COLOR: Record<MenuItemId, string> = {
+  latte: '#d9a877', cocoa: '#7fb0e0', matcha: '#8fcf7a', cake: '#f59fb8', cookie: '#f2c14e',
+  gingerbread_latte: '#e9705f', pumpkin_latte: '#f2913a', sakura_latte: '#f7a8c4',
+};
+export function itemColor(id: MenuItemId): string { return ITEM_COLOR[id] ?? ITEM_COLOR.latte; }
+/** A little coloured coaster to put under an item (centred at 0,0 like the item). */
+export function itemCoaster(id: MenuItemId): string {
+  return `<ellipse cx="0" cy="7.6" rx="12.5" ry="4" fill="${itemColor(id)}" stroke="${INK}" stroke-width="1.4"/>`;
+}
+
 /** A menu item (cup / plate) centred at (0,0), roughly 22 units wide at scale 1. */
 export function item(id: MenuItemId): string {
   return ITEMS[id] ?? ITEMS.latte;
@@ -142,7 +160,9 @@ export function bubble(kind: 'order' | 'reading' | 'waiting' | 'door' | 'heart' 
     case 'order':
     case 'waiting': {
       const it = item(o.item ?? 'latte');
-      inner = `<g transform="translate(0,-29) scale(.85)"${kind === 'waiting' ? ' opacity=".45"' : ''}>${it}</g>`;
+      // each item sits on its own colour (latte brown, cocoa blue, matcha green...) so orders read at a glance
+      inner = `<g${kind === 'waiting' ? ' opacity=".72"' : ''}><rect x="-19" y="-43.4" width="38" height="23.6" rx="7" fill="${itemColor(o.item ?? 'latte')}" opacity=".5"/>`
+        + `<g transform="translate(0,-30.6) scale(.98)">${it}</g></g>`;
       break;
     }
     case 'door': inner = exclaim(0, -31); break;

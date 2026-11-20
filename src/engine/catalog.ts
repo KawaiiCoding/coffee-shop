@@ -88,7 +88,7 @@ export function pickOrder(rng: () => number, theme: ThemeId, level: (id: Upgrade
 }
 
 export function computeStars(served: number, lost: number): 0 | 1 | 2 | 3 {
-  if (lost === 0 && served >= 6) return 3;
+  if (lost === 0 && served >= 4) return 3;
   if (served + lost > 0 && served / (served + lost) >= 0.75) return 2;
   if (served >= 1) return 1;
   return 0;

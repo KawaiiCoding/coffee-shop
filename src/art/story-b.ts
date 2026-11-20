@@ -49,8 +49,8 @@ const BEAR_EAR_TAG = '<path d="M-18,-42 C-25,-50 -14,-59 -8,-49z"';
 const ARM_UP = 'M8,-11 C14,-18 18,-28 21,-36 C23,-41 30,-40 29,-34 C27,-25 22,-13 14,-4z';
 const ARM_FWD = 'M9,-11 C17,-12 26,-12 32,-11 C37,-10 37,-3 32,-3 C25,-3 17,-2 11,-1z';
 const ARM_CHEST = 'M12,-9 C18,-3 15,5 7,6 C2,6 1,1 5,0 C8,-1 9,-4 9,-9z';
-const ARM_HUG = 'M10,-12 C22,-17 36,-16 44,-10 C48,-6 45,-1 40,-3 C33,-7 22,-6 12,-2z';
-const ARM_HUG_LOW = 'M10,-6 C20,-8 30,-6 38,-1 C42,2 39,7 35,5 C28,1 20,1 12,2z';
+const ARM_HUG = 'M10,-11 C17,-13 24,-11 28,-6 C30,-2 26,2 22,0 C19,-3 15,-3 11,-1z';
+const ARM_HUG_LOW = 'M10,-5 C17,-7 24,-5 28,0 C30,4 26,7 22,5 C19,2 15,2 11,3z';
 
 function strip(svg: string, d: string): string {
   const tag = `<path d="${d}"`;
@@ -100,6 +100,15 @@ function envelope(x: number, y: number, w: number, rot = 0): string {
     sh(box(-w / 2, -h / 2, w, h, 2.5, 0.6), CREAM, 1.8)
     + ln(`M${n(-w / 2 + 1.5)},${n(-h / 2 + 1.5)} L0,${n(h * 0.12)} L${n(w / 2 - 1.5)},${n(-h / 2 + 1.5)}`, 1.4)
     + heart(0, n(h * 0.14), n(w / 34), '#e2607a', INK));
+}
+
+/** Green pay note with a yen mark (Mocha's own money). */
+function banknote(x: number, y: number, w: number, rot = 0): string {
+  const h = n(w * 0.6);
+  return g(`translate(${x},${y}) rotate(${rot})`,
+    sh(box(-w / 2, -h / 2, w, h, 2.5, 0.6), '#9bd8ab', 1.8)
+    + `<circle r="${n(h * 0.3)}" fill="#e8f7ea" stroke="${INK}" stroke-width="1.2"/>`
+    + ln(`M${n(-h * 0.14)},${n(-h * 0.17)} L0,0 L${n(h * 0.14)},${n(-h * 0.17)} M0,0 V${n(h * 0.2)} M${n(-h * 0.12)},${n(h * 0.06)} H${n(h * 0.12)}`, 1.2, '#2f7d54'));
 }
 
 function bunting(x1: number, y1: number, x2: number, y2: number, sag: number, cols: string[]): string {
@@ -152,7 +161,7 @@ function jar(x: number, y: number, s: number, lid: boolean): string {
     + (lid ? sh(box(-11, -36, 22, 7, 2.5, 0.5), '#e58a94', 1.8) : ln('M-11,-30 C-5,-32 5,-32 11,-30', 1.6)));
 }
 
-function bike(x: number, y: number, s: number, col: string): string {
+export function bike(x: number, y: number, s: number, col: string): string {
   const tube = (d: string) => ln(d, 6.5) + ln(d, 3.6, col);
   const wheel = (wx: number) => {
     const t = blob(wx, 0, 19, 19, 0);
@@ -271,7 +280,7 @@ function payday(): string {
   // Button gives, Mocha takes
   s += fig(BUTTON, 128, 214, 1.2, 'happy', 1, { armR: ARM_FWD });
   s += fig(MOCHA_APRON, 200, 216, 1.2, 'happy', -1, { armR: ARM_FWD });
-  s += envelope(164, 170, 26, -4);
+  s += banknote(164, 170, 28, -4);
   s += sh(blob(153, 172, 4.5, 4, 0.2), BUTTON.color, 1.8) + sh(blob(176, 173, 4.5, 4, 0.2), MOCHA_APRON.color, 1.8);
   s += hrt(164, 146, 0.75) + hrt(150, 132, 0.45, '#f7b6c8') + hrt(178, 126, 0.5, '#f7b6c8');
   // sparkles float in the air above the two heads, never over a face

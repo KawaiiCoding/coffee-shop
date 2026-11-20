@@ -15,6 +15,24 @@ const who = (look: CharacterLook, x: number, y: number, s: number, opts: DrawCha
   g(`translate(${x},${y}) scale(${s})`, character(look, opts));
 
 /** Doll-space overlay (same mapping as character(): feet at 0,0; standing). */
+/** Remove a default arm from character() markup, so a posed arm drawn on top doesn't make a third one. */
+const ARM_R = 'M13,-6 C22,-3 26,6 22,10 C18,13 14,6 12,0z';
+const ARM_L = 'M-14,-6 C-23,-2 -26,8 -21,11 C-17,13 -14,6 -12,0z';
+function strip(svg: string, d: string): string {
+  const tag = `<path d="${d}"`;
+  let i = svg.indexOf(tag);
+  while (i >= 0) {
+    const e = svg.indexOf('/>', i);
+    if (e < 0) break;
+    svg = svg.slice(0, i) + svg.slice(e + 2);
+    i = svg.indexOf(tag);
+  }
+  return svg;
+}
+/** Like who(), minus one default arm (a custom one is drawn with doll()). */
+const whoNoArm = (look: CharacterLook, x: number, y: number, s: number, opts: DrawCharacterOpts, arm: string) =>
+  g(`translate(${x},${y}) scale(${s})`, strip(character(look, opts), arm));
+
 const doll = (x: number, y: number, s: number, f: 1 | -1, inner: string, sit = false) =>
   g(`translate(${x},${y}) scale(${s}) scale(${0.88 * f},0.88) translate(0,${sit ? -11 : -35})`, inner);
 
@@ -269,8 +287,8 @@ function artHired(): string {
   // warm glow behind characters
   s += `<path d="${blob(160, 120, 120, 70, 0)}" fill="#fff3cc" opacity=".45"/>`;
   // Mocha (left, happy, arms up) and Button (right) handing an apron
-  s += who(MOCHA_SCARF, 98, 206, 1.6, { pose: 'stand', mood: 'happy', facing: 1 });
-  s += who(BUTTON, 228, 206, 1.6, { pose: 'stand', mood: 'happy', facing: -1 });
+  s += whoNoArm(MOCHA_SCARF, 98, 206, 1.6, { pose: 'stand', mood: 'happy', facing: 1 }, ARM_R);
+  s += whoNoArm(BUTTON, 228, 206, 1.6, { pose: 'stand', mood: 'happy', facing: -1 }, ARM_R);
   // Button's raised arm holding the apron toward Mocha
   const BUTTON_ARM = 'M11,-8 C18,-12 28,-14 32,-10 C35,-6 30,-2 12,1z';
   s += doll(228, 206, 1.6, -1, sh(BUTTON_ARM, '#b9b3c9'));
@@ -349,9 +367,9 @@ function artMessy(): string {
     + ln('M-10,-6 L-12,6 M-4,-8 L-5,8 M3,-8 L3,8 M9,-6 L11,6', 1.1)
     + `<path d="M-13,-9 C-5,-7 5,-7 13,-9" fill="none" stroke="#c4506a" stroke-width="2.2"/>`);
   s += broom;
-  s += who(MOCHA_APRON, 80, 210, 1.45, { pose: 'stand', mood: 'calm', facing: 1 });
+  s += whoNoArm(MOCHA_APRON, 80, 210, 1.45, { pose: 'stand', mood: 'calm', facing: 1 }, ARM_L);
   s += doll(80, 210, 1.45, 1, sh('M-14,-6 C-22,-12 -24,-22 -20,-25 C-15,-27 -13,-18 -12,-8z', '#d9a877'));
-  s += who(BUTTON, 246, 210, 1.45, { pose: 'stand', mood: 'happy', facing: -1 });
+  s += whoNoArm(BUTTON, 246, 210, 1.45, { pose: 'stand', mood: 'happy', facing: -1 }, ARM_R);
   // Button's pointing arm (toward the mess, i.e. left)
   s += doll(246, 210, 1.45, -1,
     sh('M11,-8 C20,-12 30,-16 36,-14 C39,-11 36,-8 12,1z', '#b9b3c9')

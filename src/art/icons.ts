@@ -79,22 +79,19 @@ const speaker = () =>
 const slash = () => ln('M6,6 L26,26', 5.4, CREAM) + ln('M6,6 L26,26', 2.6);
 
 const ROSE = '#f4a9a8';
-const ROSE_DEEP = '#e48a90';
 const MINT = '#8fc3a7';
 const MINT_LIGHT = '#cfe8d9';
 const ORANGE = '#f2a65a';
 const RED = '#e2565f';
 const PETAL = '#f9c6cf';
 
-/** Mocha's own money (PAY): rose envelope-wallet, mint note peeking out, heart clasp. */
+/** Mocha's own money (PAY): a green banknote with a yen mark, clearly not a café coin. */
 const payWallet = () =>
-  sh(box(7.4, 4.6, 17, 9, 1.4, 0.4), MINT_LIGHT, 1.6)
-  + ln('M10.6,7.6 H15.4', 1.2, MINT) + fl(heartPath(19.6, 8.4, 0.14), MINT)
-  + sh(box(4, 9.6, 24, 18, 3.6, 0.6), ROSE, W)
-  + sh('M4.6,11.6 C4.4,10.2 5.4,9.8 7.2,9.8 H24.8 C26.6,9.8 27.6,10.2 27.4,11.6 L17.6,19.4 C16.6,20.2 15.4,20.2 14.4,19.4 Z', ROSE_DEEP, 1.8)
-  + sh(heartPath(16, 19.6, 0.34), BERRY, 1.4)
-  + shine('M15,18 q0.4,-1 1.2,-1.2')
-  + shine('M6.8,23.6 C6.8,22.2 7.2,21.4 8,20.8');
+  sh(box(2.6, 8, 26.8, 16.4, 3, 0.5), '#8fd3a4', W)
+  + ln(box(5.6, 10.8, 20.8, 10.8, 1.8, 0.3), 1.1, '#4f9a6b')
+  + sh(blob(16, 16.2, 4.9, 4.7, 0), '#eaf8ec', 1.4)
+  + ln('M13.9,13.4 L16,16.2 L18.1,13.4 M16,16.2 V19.4 M14.2,16.6 H17.8 M14.2,18.2 H17.8', 1.3, '#2f7d54')
+  + shine('M5.6,13.6 C5.6,12.4 6,11.6 6.8,11.2');
 
 const dot = (x: number, y: number, rad = 1.2, c = EYE) => `<circle cx="${x}" cy="${y}" r="${rad}" fill="${c}"/>`;
 

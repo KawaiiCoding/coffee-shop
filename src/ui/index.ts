@@ -9,7 +9,7 @@ import {
   dayEndHtml, displayDay, SHEET_TITLES, sheetBodyHtml, titleHtml, type SheetKind, type UiState,
 } from './sheets';
 import {
-  choreProgress, currentGoal, homeChipHtml, homeDockHtml, homeLock, storyHtml,
+  choreProgress, currentGoal, eatOpensSnacks, homeChipHtml, homeDockHtml, homeLock, storyHtml,
   TUTORIAL_COUNT, tutorialDoneHtml, tutorialHtml, type HomeUi,
 } from './screens';
 import { mountExtras, type Extras } from './extras';
@@ -66,6 +66,9 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
           </header>
           <header class="hud hud-home" hidden>
             <button class="ibtn" data-act="open" data-sheet="settings" aria-label="Settings">${icon('settings')}</button>
+            <button class="ibtn hud-goal" data-act="home-chip" data-focus="home-chip" aria-expanded="false" aria-label="Goal and dream">
+              ${icon('goal')}<span class="hud-goal-bar" aria-hidden="true"><i></i></span>
+            </button>
             <div class="home-stats">
               <div class="stat stat-energy" role="meter" aria-label="Energy" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                 ${icon('energy')}<span class="mbar"><i></i></span><b>0</b>
@@ -210,8 +213,22 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
   for (const ev of ['pointerdown', 'touchend', 'click', 'keydown']) root.addEventListener(ev, unlock, { capture: true });
 
   /* ------------------------------ ui state ------------------------------ */
-  const ui: UiState = { decorSlot: 'ceiling', confirmTitle: false, confirmReset: false, upTab: 'cafe', decorPreview: null };
-  const homeUi: HomeUi = { more: false, chip: false };
+  // One-time pointers ("spend tips here", "shops are in More"): shown until the player has opened those once.
+  const COACH_KEY = 'coffee-shop-coach';
+  const coach: { shop?: boolean; more?: boolean } = (() => {
+    try { return JSON.parse(localStorage.getItem(COACH_KEY) || '{}') as { shop?: boolean; more?: boolean }; } catch { return {}; }
+  })();
+  const coachDone = (k: 'shop' | 'more') => {
+    if (coach[k]) return;
+    coach[k] = true;
+    try { localStorage.setItem(COACH_KEY, JSON.stringify(coach)); } catch { /* storage blocked */ }
+    ui.coachShop = !coach.shop; homeUi.coachMore = !coach.more;
+    last.home = '';
+    if (game.state.mode === 'dayEnd') render(dayEndEl, dayEndHtml(game, game.state.lastDay, ui));
+  };
+  const ui: UiState = { decorSlot: 'ceiling', confirmTitle: false, confirmReset: false, upTab: 'cafe', decorPreview: null, coachShop: !coach.shop };
+  const homeUi: HomeUi = { more: false, chip: false, coachMore: !coach.more };
+  const goalBtn = qs(homeTop, '.hud-goal');
 
   /* ------------------------------ extras ------------------------------ */
   // Konbini basket bar, recipe picker, popups and the calendar live in extras.ts, mounted into
@@ -224,6 +241,8 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
   let news: NewsUI = { open() {}, frame() {} };
   try { journal = mountJournal(uiEl, game, audio); } catch (err) { console.error('journal failed to mount', err); }
   try { news = mountNews(uiEl, game, audio); } catch (err) { console.error('news failed to mount', err); }
+  // tapping a "new journal page" note opens the journal right on that page
+  extras.onOpenJournal = (id) => { if (open) hideSheet(); journal.open(id); };
   const ex = (f: () => void) => { try { f(); } catch (err) { console.error(err); } };
   let open: SheetKind | null = null;
   let opener: HTMLElement | null = null;
@@ -250,7 +269,7 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
   function refreshScreens(): void {
     const m = game.state.mode;
     if (m === 'title') render(titleEl, titleHtml(game));
-    if (m === 'dayEnd') render(dayEndEl, dayEndHtml(game, game.state.lastDay));
+    if (m === 'dayEnd') render(dayEndEl, dayEndHtml(game, game.state.lastDay, ui));
     last.story = ''; last.chores = ''; last.home = ''; // re-render on the next frame
   }
 
@@ -349,7 +368,13 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
       case 'pause': tap(); game.pause(); sync(); break;
       case 'resume': tap(); hideSheet(); game.resume(); sync(); break;
       case 'start': tap(); if (open) hideSheet(); game.startDay(); sync(); break;
-      case 'open': tap(); homeUi.more = false; last.home = ''; openSheet(t.dataset.sheet as SheetKind, t); break;
+      case 'open': {
+        tap(); homeUi.more = false; homeUi.chip = false; last.home = '';
+        const k = t.dataset.sheet as SheetKind;
+        if (k === 'upgrades' || k === 'decor') coachDone('shop');
+        openSheet(k, t);
+        break;
+      }
       case 'nav': {
         tap();
         const k = t.dataset.sheet as 'cafe' | SheetKind;
@@ -358,11 +383,11 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
       }
       case 'close': tap(); closeSheet(); break;
       case 'story-next': storyNext(); break;
-      case 'story-skip': tap(); game.storySkip(); sync(); break;
+      case 'story-skip': if (performance.now() < storyLock) break; tap(); game.storySkip(); sync(); break;
       case 'go-home': tap(); if (open) hideSheet(); game.goHome(); sync(); break;
       case 'home-act': homeAct(id as HomeActionId, t); break;
-      case 'home-more': tap(); homeUi.more = !homeUi.more; last.home = ''; sync(); break;
-      case 'home-chip': tap(); homeUi.chip = !homeUi.chip; last.home = ''; sync(); break;
+      case 'home-more': tap(); homeUi.more = !homeUi.more; homeUi.chip = false; coachDone('more'); last.home = ''; sync(); break;
+      case 'home-chip': tap(); homeUi.chip = !homeUi.chip; homeUi.more = false; last.home = ''; sync(); break;
       case 'calendar': tap(); homeUi.more = false; last.home = ''; ex(() => extras.openCalendar()); break;
       case 'journal': tap(); homeUi.more = false; last.home = ''; if (open) hideSheet(); ex(() => journal.open()); break;
       case 'news': tap(); homeUi.more = false; last.home = ''; if (open) hideSheet(); ex(() => news.open()); break;
@@ -446,7 +471,10 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
       toast(why);
     };
     const lock = id === 'sleep' ? null : homeLock(game, id);
-    if (id === 'calendar') { tap(); homeUi.more = false; ex(() => extras.openCalendar()); }
+    if (id === 'eat' && !lock && game.state.homeBear?.action == null && eatOpensSnacks(game)) {
+      // nothing cooked, but there is a snack in the pantry: pick one
+      tap(); homeUi.more = false; ex(() => extras.openRecipes('snacks'));
+    } else if (id === 'calendar') { tap(); homeUi.more = false; ex(() => extras.openCalendar()); }
     else if (lock) fail(lock === 'hide' ? 'Not right now' : lock);
     else {
       let can: { ok: boolean; reason?: string } = { ok: true };
@@ -479,6 +507,14 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
     if (t.dataset.vol === 'sfxVolume') { try { audio.playSfx('coin'); } catch { /* ignore */ } }
     if (deferRefresh) { deferRefresh = false; t.blur(); refreshAll(); }
   });
+
+  // The goal card closes when you tap anywhere else (it never stays over the room).
+  root.addEventListener('pointerdown', (e) => {
+    if (!homeUi.chip) return;
+    const t = e.target as Element;
+    if (t.closest('.home-chips') || t.closest('.hud-goal')) return;
+    homeUi.chip = false; last.home = '';
+  }, { capture: true });
 
   // Pressed "squish" on any button.
   uiEl.addEventListener('pointerdown', (e) => {
@@ -703,6 +739,13 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
     last.home = key;
     setMeter(energyEl, h.energy);
     setMeter(happyEl, h.happiness);
+    goalBtn.setAttribute('aria-expanded', String(homeUi.chip));
+    goalBtn.classList.toggle('on', homeUi.chip);
+    goalBtn.hidden = !g && !h;
+    const gk = g ? Math.max(0, Math.min(1, g.progress || 0)) : 1;
+    (goalBtn.querySelector('.hud-goal-bar i') as HTMLElement).style.transform = `scaleX(${gk.toFixed(3)})`;
+    goalBtn.classList.toggle('ready', gk >= 1 && !!g);
+    goalBtn.setAttribute('aria-label', g ? `Chapter ${g.chapter + 1}: ${g.goal}. ${Math.round(gk * 100)} percent. ${homeUi.chip ? 'Hide' : 'Show'} goal and dream` : 'Dream');
     render(chipsEl, homeChipHtml(game, homeUi.chip));
     const d = homeDockHtml(game, homeUi);
     render(dock, d.row);
@@ -745,18 +788,22 @@ export function mountUI(root: HTMLElement, game: GameApi, audio: AudioApi): Moun
       if (key !== last.story) {
         const first = last.story === '';
         last.story = key;
+        if (first) storyLock = performance.now() + 450; // a story that just appeared can't be skipped by a stray tap
         render(storyEl, s.story ? storyHtml(s.story.id, s.story.panel) : '');
         if (first && !open) (storyEl.querySelector('[data-focus="story-next"]') as HTMLElement | null)?.focus({ preventScroll: true });
       }
     } else if (s.mode === 'cleanup') syncCleanup(s);
     else if (v === 'home') syncHome(s);
     syncTutorial(s);
+    // tell the engine when a menu is open, so no story starts on top of it
+    (s as GameState).uiBusy = !!open || !!uiEl.querySelector('.xs-layer:not([hidden]), .xj-layer:not([hidden]), .xn-layer:not([hidden]), .xi-layer:not([hidden])');
     ex(() => extras.frame());
     ex(() => journal.frame());
     ex(() => news.frame());
     const hintMode = s.mode === 'playing' || s.mode === 'cleanup' || v === 'home' || v === 'konbini';
     const h = hintMode && s.hint && s.hint.text
-      && (s.progress.settings.hints !== false || (s.mode === 'playing' && s.tutorial.active)) ? s.hint.text : null;
+      && (s.progress.settings.hints !== false || (s.mode === 'playing' && s.tutorial.active))
+      && !(v === 'home' && (homeUi.coachMore || homeUi.more || homeUi.chip)) ? s.hint.text : null;
     if (h !== last.hint) {
       last.hint = h;
       hint.hidden = !h;

@@ -1,5 +1,7 @@
 /* =====================================================================
-   CALENDAR — real-world date → season, theme, upcoming festival.
+   CALENDAR — Yarn Street's own calendar: date → season, theme, upcoming festival.
+   The date comes from the game day (worldDate), not the real world: every work day
+   hops a few calendar days, so seasons and festivals roll by as you play.
    ===================================================================== */
 import type { CalendarInfo, SeasonEventDef, ThemeId } from '../types';
 import { SEASON_EVENTS } from '../content/progression';
@@ -7,6 +9,14 @@ import { SEASON_EVENTS } from '../content/progression';
 const DAY_MS = 86_400_000;
 /** Days after the event the festival theme keeps showing. */
 const AFTER_DAYS = 3;
+
+/** Calendar days that pass per game day (a full year goes by in ~73 work days). */
+export const DAYS_PER_GAME_DAY = 5;
+/** Yarn Street's date on a game day (day 1 = 1 March, the start of spring). */
+export function worldDate(gameDay: number): Date {
+  const d = Math.max(1, Math.floor(gameDay) || 1);
+  return new Date(2024, 2, 1 + (d - 1) * DAYS_PER_GAME_DAY, 12);
+}
 
 /** Whole-day number for a calendar date (UTC based, so DST never shifts it). */
 const dayNum = (y: number, m: number, d: number): number => Math.round(Date.UTC(y, m - 1, d) / DAY_MS);
@@ -34,7 +44,7 @@ export function calendarInfo(now: Date): CalendarInfo {
   let today: CalendarInfo['today'] = null;
   for (const ev of SEASON_EVENTS) {
     const { daysLeft } = daysUntil(ev, now);
-    if (daysLeft === 0) today = ev.id;
+    if (daysLeft < DAYS_PER_GAME_DAY && (today === null || daysLeft === 0)) today = ev.id; // the hop lands on / just before it
     if (!next || daysLeft < next.daysLeft) next = { id: ev.id, name: ev.name, daysLeft, blurb: ev.blurb };
   }
   return {

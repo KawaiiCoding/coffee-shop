@@ -157,6 +157,8 @@ export interface Effect {
 
 export interface DayStats {
   day: number; served: number; lost: number; tips: number; stars: 0 | 1 | 2 | 3;
+  /** Snack Button packed for Mocha that day (only before Hoshi Mart opens). */
+  treat?: SnackId;
   /** The bear's pay for the day (goes to progress.home.wallet). 0 while the day runs. */
   salary: number;
 }
@@ -170,7 +172,7 @@ export type StoryArtId =
   | 'shop_ready' | 'payday' | 'home_evening' | 'dream_bike' | 'dream_mom'
   // v3 illustrations (story-c.ts)
   | 'phone_gift' | 'regular_gift' | 'konbini_open' | 'shooting_star' | 'cooking_first'
-  | 'fireplace_night' | 'mom_visits_cafe' | 'friends_party' | 'festival_coming' | 'new_dream';
+  | 'fireplace_night' | 'mom_visits_cafe' | 'friends_party' | 'festival_coming' | 'new_dream' | 'mom_call';
 export interface StoryPanel { art: StoryArtId; text: string; speaker?: string }
 
 /* ---------- getting the café ready (mode 'cleanup') ---------- */
@@ -308,6 +310,8 @@ export interface GameState {
   effects: Effect[];
   dayStats: DayStats;                 // running stats of current day
   lastDay: DayStats | null;           // filled when a day ends
+  /** Set by the UI while one of its sheets is open, so the engine doesn't start a story on top of it. */
+  uiBusy?: boolean;
   time: number;                       // total seconds since start (for animation)
 }
 
@@ -320,6 +324,8 @@ export type GameEvent =
   | { type: 'decor' }                 // placed decor or theme changed (renderer should rebuild static layer)
   | { type: 'scene'; scene: Scene }   // the place changed (music switches playlist)
   | { type: 'popup' }                 // state.popup was set
+  | { type: 'konbiniPick'; id: KonbiniStockId } // a shelf product was tapped (UI shows it big with its English name)
+  | { type: 'secret'; id: string; title: string } // a journal page was found (UI shows a small tappable note, not a popup)
   | { type: 'sheet'; sheet: 'cook' | 'calendar' | 'news' | 'journal' }; // a home tap asks the UI to open the recipe picker / calendar / newspaper / journal
 
 export interface GameApi {
@@ -459,7 +465,8 @@ export interface ChapterDef {
   id: number; title: string;
   goal: string;                        // short, e.g. "Serve 10 guests"
   check: GoalCheck;
-  story?: StoryId;                     // played when the chapter is completed
+  story?: StoryId;                     // played when the chapter is completed (before the reward card)
+  done?: string;                       // one warm closing line shown on the "chapter complete" card
   rewards: Reward[];
   unlocks?: { konbini?: boolean };     // konbini becomes visitable
 }
@@ -468,6 +475,8 @@ export interface Popup {
   title: string; text: string;
   from?: RegularId | 'button' | 'mom' | 'star';
   rewards: Reward[];
+  /** 'chapter' cards: which chapter finished (1-based), what comes next, and whether a dream came true. */
+  chapter?: number; next?: string; dream?: boolean;
 }
 export interface Stats { cooked: number; konbini: number; calls: number; wishes: number; served: number; daysPlayed: number }
 
